@@ -1,29 +1,16 @@
-// lib/components/mlkit_scanner/pages/mlkit_ocr_page.dart
-//
-// OCR CAMERA PAGE (mobile_scanner -> ML Kit Text Recognition)
-// -----------------------------------------------------------
-// Responsibilities:
-// 1) Open camera preview
-// 2) Provide a Capture button
-// 3) On capture:
-//    - Run TextRecognizer.processImage(...)
-//    - Validate recognized text
-//    - Return ScanResult(type: "ocr", ...)
-// 4) Return result exactly once and pop()
-//
-
-import 'dart:async';
 import 'dart:io';
+
 import 'package:flutter/material.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:image_picker/image_picker.dart';
+
 import '../models/scan_result.dart';
 
 class MlkitOcrPage extends StatefulWidget {
   const MlkitOcrPage({
     super.key,
     required this.title,
-    this.maxValueLength = 2048,
+    required this.maxValueLength,
   });
 
   final String title;
@@ -34,118 +21,107 @@ class MlkitOcrPage extends StatefulWidget {
 }
 
 class _MlkitOcrPageState extends State<MlkitOcrPage> {
-  final MobileScannerController _controller = MobileScannerController();
-  final TextRecognizer _textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
-  
-  bool _returned = false;
-  bool _isProcessing = false;
+  final ImagePicker _picker = ImagePicker();
+  late final TextRecognizer _recognizer;
 
-  void _returnResult(ScanResult r) {
+  bool _busy = false;
+  bool _returned = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _recognizer = TextRecognizer(script: TextRecognitionScript.latin);
+
+    // Optional UX: open camera immediately when page opens
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _captureAndRead();
+    });
+  }
+
+  @override
+  void dispose() {
+    _recognizer.close();
+    super.dispose();
+  }
+
+  void _returnOnce(ScanResult r) {
     if (_returned) return;
     _returned = true;
-
+    if (!mounted) return;
     Navigator.of(context).pop(r);
   }
 
-  Future<void> _captureAndRecognize() async {
-    if (_isProcessing || _returned) return;
-    
-    setState(() {
-      _isProcessing = true;
-    });
+  Future<void> _captureAndRead() async {
+    if (_busy) return;
+
+    setState(() => _busy = true);
 
     try {
-      // 1. Capture image from camera
-      // Note: analyzeImage in mobile_scanner 7.x triggers onDetect with the image data
-      // but we want a one-off capture. 
-      // If mobile_scanner doesn't support a direct "capture to file", 
-      // we might need to use the stream or a different approach.
-      // However, many users use mobile_scanner for the preview and then 
-      // a separate mechanism for capture if needed.
-      // For this implementation, we'll use the analyzeImage which should trigger onDetect.
-      // But we need the actual text recognition.
-      
-      // Let's use the `takeScreenshot` or similar if available, 
-      // but mobile_scanner is more about live detection.
-      
-      // ALTERNATIVE: Use the controller's analyzeImage and wait for the next detection?
-      // No, the user specifically asked for TextRecognizer.processImage(...)
-      
-      // If I can't easily get a File/InputImage from mobile_scanner, 
-      // I'll provide the structure and a note.
-      
-      // Actually, let's assume we can get the image path from a capture method.
-      // Since I cannot run the code to verify the exact method name in 7.1.4,
-      // I will use a placeholder for the image acquisition but implement the ML Kit logic.
-      
-      /* 
-      final XFile? file = await _controller.takePicture(); // Hypothetical
-      if (file == null) throw Exception("Failed to capture image");
-      final inputImage = InputImage.fromFilePath(file.path);
-      */
-      
-      // For the sake of a working-looking POC:
-      final RecognizedText recognizedText = await _textRecognizer.processImage(
-        InputImage.fromFilePath('path/to/captured/image.jpg') // Placeholder
+      final XFile? xfile = await _picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 95,
       );
 
-      final String text = recognizedText.text.trim();
+      if (xfile == null) {
+        _returnOnce(const ScanResult(
+          status: "fail",
+          code: "CANCELLED",
+          value: "",
+          message: "Scan cancelled.",
+        ));
+        return;
+      }
+
+      final inputImage = InputImage.fromFile(File(xfile.path));
+      final RecognizedText recognized = await _recognizer.processImage(inputImage);
+
+      final String text = recognized.text.trim();
 
       if (text.isEmpty) {
-        _returnResult(const ScanResult(
+        _returnOnce(const ScanResult(
           status: "fail",
           code: "EMPTY",
           value: "",
-          type: "ocr",
-          message: "No text recognized in the image.",
+          message: "No text detected. Hold steady, improve lighting, and try again.",
         ));
         return;
       }
 
       if (text.length > widget.maxValueLength) {
-        _returnResult(const ScanResult(
+        _returnOnce(const ScanResult(
           status: "fail",
           code: "TOO_LONG",
           value: "",
-          type: "ocr",
-          message: "Recognized text is too long.",
+          message: "Recognized text is too large to process.",
         ));
         return;
       }
 
-      _returnResult(ScanResult(
+      _returnOnce(ScanResult(
         status: "pass",
         code: "OK",
         value: text,
-        type: "ocr",
-        meta: {
-          "blocks": recognizedText.blocks.length,
-        },
+        message: "",
       ));
-
     } catch (e) {
-      // If this is just a POC and we don't have a real image yet:
-      _returnResult(ScanResult(
-        status: "pass",
-        code: "OK",
-        value: "Sample recognized text from OCR",
-        type: "ocr",
-        message: "Note: Image capture logic needs alignment with mobile_scanner version.",
+      _returnOnce(ScanResult(
+        status: "fail",
+        code: "ERROR",
+        value: "",
+        message: e.toString(),
       ));
     } finally {
-      if (mounted) {
-        setState(() {
-          _isProcessing = false;
-        });
-      }
+      if (mounted) setState(() => _busy = false);
     }
   }
 
-  @override
-  void dispose() {
-    _controller.dispose();
-    _textRecognizer.close();
-    super.dispose();
+  void _cancel() {
+    _returnOnce(const ScanResult(
+      status: "fail",
+      code: "CANCELLED",
+      value: "",
+      message: "Scan cancelled.",
+    ));
   }
 
   @override
@@ -156,41 +132,24 @@ class _MlkitOcrPageState extends State<MlkitOcrPage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.close),
-            onPressed: () => _returnResult(const ScanResult(
-              status: "fail",
-              code: "CANCELLED",
-              value: "",
-              type: "ocr",
-              message: "OCR cancelled.",
-            )),
-          )
+            onPressed: _cancel,
+          ),
         ],
       ),
-      body: Stack(
-        children: [
-          MobileScanner(
-            controller: _controller,
-            fit: BoxFit.cover,
-          ),
-          // Overlay for capture button
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: Padding(
-              padding: const EdgeInsets.all(32.0),
-              child: FloatingActionButton.extended(
-                onPressed: _isProcessing ? null : _captureAndRecognize,
-                label: _isProcessing 
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                    ) 
-                  : const Text("Capture & Read Text"),
-                icon: const Icon(Icons.camera_alt),
+      body: Center(
+        child: _busy
+            ? const CircularProgressIndicator()
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Capture an image to read text'),
+                  const SizedBox(height: 12),
+                  ElevatedButton(
+                    onPressed: _captureAndRead,
+                    child: const Text('Capture & Read Text'),
+                  ),
+                ],
               ),
-            ),
-          ),
-        ],
       ),
     );
   }
