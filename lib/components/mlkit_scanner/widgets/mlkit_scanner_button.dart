@@ -13,6 +13,7 @@
 import 'package:flutter/material.dart';
 import '../models/scan_result.dart';
 import '../pages/mlkit_scanner_page.dart';
+import '../pages/mlkit_ocr_page.dart';
 
 class MlkitScannerButton extends StatefulWidget {
   const MlkitScannerButton({
@@ -23,6 +24,7 @@ class MlkitScannerButton extends StatefulWidget {
     this.icon = Icons.qr_code_scanner,
     this.tooltip = "Scan QR/Barcode",
     this.title = "Scan",
+    this.mode = "chooser", // "barcode" | "ocr" | "chooser"
   });
 
   final void Function(ScanResult result) onResult;
@@ -34,6 +36,7 @@ class MlkitScannerButton extends StatefulWidget {
   final String tooltip;
 
   final String title;
+  final String mode;
 
   @override
   State<MlkitScannerButton> createState() => _MlkitScannerButtonState();
@@ -47,28 +50,59 @@ class _MlkitScannerButtonState extends State<MlkitScannerButton> {
     _opening = true;
 
     try {
-      final ScanResult result = await Navigator.of(context)
-          .push<ScanResult>(
-            MaterialPageRoute(
-              fullscreenDialog: true,
-              builder: (_) => MlkitScannerPage(
-                timeoutSeconds: widget.timeoutSeconds,
-                maxValueLength: widget.maxValueLength,
-                title: widget.title,
-              ),
-            ),
-          )
-          .then(
-            (v) => v ??
-                const ScanResult(
-                  status: "fail",
-                  code: "CANCELLED",
-                  value: "",
-                  message: "Scan cancelled.",
-                ),
-          );
+      String selectedMode = widget.mode;
 
-      widget.onResult(result);
+      if (widget.mode == "chooser") {
+        final String? choice = await showModalBottomSheet<String>(
+          context: context,
+          builder: (context) => SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.qr_code_scanner),
+                  title: const Text("Scan QR/Barcode"),
+                  onTap: () => Navigator.pop(context, "barcode"),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.text_fields),
+                  title: const Text("Capture & Read Text (OCR)"),
+                  onTap: () => Navigator.pop(context, "ocr"),
+                ),
+              ],
+            ),
+          ),
+        );
+
+        if (choice == null) return;
+        selectedMode = choice;
+      }
+
+      final ScanResult? result = await Navigator.of(context).push<ScanResult>(
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (_) => selectedMode == "ocr"
+              ? MlkitOcrPage(
+                  title: "OCR Scanner",
+                  maxValueLength: widget.maxValueLength,
+                )
+              : MlkitScannerPage(
+                  timeoutSeconds: widget.timeoutSeconds,
+                  maxValueLength: widget.maxValueLength,
+                  title: widget.title,
+                ),
+        ),
+      );
+
+      widget.onResult(
+        result ??
+            const ScanResult(
+              status: "fail",
+              code: "CANCELLED",
+              value: "",
+              message: "Scan cancelled.",
+            ),
+      );
     } finally {
       _opening = false;
     }

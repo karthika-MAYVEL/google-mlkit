@@ -11,3 +11,6 @@
 //
 export 'models/scan_result.dart';
 export 'widgets/mlkit_scanner_button.dart';
+// Optionally export pages if needed, but usually button is enough.
+// export 'pages/mlkit_scanner_page.dart';
+// export 'pages/mlkit_ocr_page.dart';
