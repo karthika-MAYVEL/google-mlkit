@@ -21,10 +21,24 @@ class ScannerTestPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
+    return Scaffold(
+      appBar: AppBar(title: const Text('ML Kit Scanner Test')),
       body: SafeArea(
         child: Center(
-          child: MlKitScanner(), // <-- change to your real widget name
+          child: MlkitScannerButton(
+            onResult: (result) {
+              debugPrint('Scan Result: ${result.status} - ${result.value}');
+              if (result.status == 'pass') {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Scanned: ${result.value}')),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error: ${result.message}')),
+                );
+              }
+            },
+          ),
         ),
       ),
     );

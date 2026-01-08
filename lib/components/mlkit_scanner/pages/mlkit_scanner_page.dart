@@ -139,16 +139,6 @@ class _MlkitScannerPageState extends State<MlkitScannerPage> {
           ));
         },
 
-        // STEP 9: Scanner error handling (permission / camera failure etc.)
-        onScannerError: (error) {
-          _returnResult(ScanResult(
-            status: "fail",
-            code: "CAMERA_ERROR",
-            value: "",
-            message: error.errorDetails?.message ??
-                "Scanner error. Check camera permission and try again.",
-          ));
-        },
       ),
     );
   }
