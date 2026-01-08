@@ -1,13 +1,13 @@
 // lib/components/mlkit_scanner/widgets/mlkit_scanner_button.dart
 //
-// STEP 3 (REUSABLE FRONTEND WIDGET)
-// ---------------------------------
-// This is the component you place in any screen (AppBar, form, etc.).
-//
-// What it does:
-// 1) Renders a scan IconButton
-// 2) On tap, opens the full-screen ML Kit scanner page
-// 3) Receives ScanResult and returns it via onResult callback
+// REUSABLE COMPONENT WIDGET (the one you place anywhere)
+// -----------------------------------------------------
+// Responsibilities:
+// 1) Render a scan IconButton
+// 2) On tap, push MlkitScannerPage
+// 3) Receive ScanResult and pass to onResult
+// 4) Prevent multiple openings with `_opening`
+// 5) Always reset `_opening` using try/finally
 //
 
 import 'package:flutter/material.dart';
@@ -25,22 +25,14 @@ class MlkitScannerButton extends StatefulWidget {
     this.title = "Scan",
   });
 
-  /// Caller receives pass/fail + value + code + message
   final void Function(ScanResult result) onResult;
 
-  /// Requirement: fail if nothing read within 10 seconds (configurable)
   final int timeoutSeconds;
-
-  /// Requirement: validator to reject huge scanned values (configurable)
   final int maxValueLength;
 
-  /// Button icon
   final IconData icon;
-
-  /// Tooltip for the button
   final String tooltip;
 
-  /// Title displayed in scanner screen AppBar
   final String title;
 
   @override
@@ -48,16 +40,13 @@ class MlkitScannerButton extends StatefulWidget {
 }
 
 class _MlkitScannerButtonState extends State<MlkitScannerButton> {
-  // Prevent double-taps opening multiple scanner routes.
   bool _opening = false;
 
   Future<void> _openScanner() async {
-    // STEP 1: Ignore if already opening
     if (_opening) return;
     _opening = true;
 
     try {
-      // STEP 2: Open the scanner page
       final ScanResult result = await Navigator.of(context)
           .push<ScanResult>(
             MaterialPageRoute(
@@ -69,7 +58,6 @@ class _MlkitScannerButtonState extends State<MlkitScannerButton> {
               ),
             ),
           )
-          // STEP 3: If user backs out without result, return CANCELLED
           .then(
             (v) => v ??
                 const ScanResult(
@@ -80,17 +68,14 @@ class _MlkitScannerButtonState extends State<MlkitScannerButton> {
                 ),
           );
 
-      // STEP 4: Return result to caller
       widget.onResult(result);
     } finally {
-      // STEP 5: Always reset, even if errors happen
       _opening = false;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // UI: simple icon button
     return IconButton(
       onPressed: _openScanner,
       icon: Icon(widget.icon),

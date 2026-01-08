@@ -1,11 +1,12 @@
 // lib/components/mlkit_scanner/mlkit_scanner.dart
 //
-// STEP 1 (PUBLIC ENTRY FILE)
-// --------------------------
-// This is the ONLY file your app screens should import.
-// It exports the component's public API (models + widgets).
+// PUBLIC ENTRY POINT
+// ------------------
+// Import this single file anywhere in your app to use the component.
 //
-// Usage anywhere in app:
+// Example:
+//   import 'package:google_mlkit/mlkit_scanner/mlkit_scanner.dart'; // if you have a lib alias
+// OR (recommended relative in your repo):
 //   import 'package:your_app/components/mlkit_scanner/mlkit_scanner.dart';
 //
 export 'models/scan_result.dart';
