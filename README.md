@@ -1,67 +1,89 @@
-camera (camera frames)
+# MLKit Scanner Component
 
-google_mlkit_barcode_scanning (ML Kit decoding)
+A reusable Flutter component for Barcode/QR code scanning and OCR (Text Recognition) using Google ML Kit.
 
-10s timeout
+## Features
 
-empty/too-long validation
+- **Barcode/QR Scanning**: Live camera preview with automatic detection.
+- **OCR (Text Recognition)**: Capture an image and extract text.
+- **Chooser Mode**: A built-in bottom sheet to let users choose between Barcode and OCR.
+- **Customizable**: Configure timeouts, max value lengths, and UI titles.
 
-returns ScanResult(status, code, value, message)
+## Installation
 
-1) Dependencies (pubspec.yaml)
+Ensure you have the following dependencies in your `pubspec.yaml`:
+
+```yaml
 dependencies:
-  flutter:
-    sdk: flutter
-  camera: ^0.11.0+2
+  mobile_scanner: ^7.1.4
   google_mlkit_barcode_scanning: ^0.13.0
+  google_mlkit_text_recognition: ^0.14.0
+  image_picker: ^1.1.2
+```
+
+<!-- ## Usage
+
+Import the component:
+
+```dart
+import 'package:google_mlkit/components/mlkit_scanner/mlkit_scanner.dart';
+``` -->
+
+### Basic Usage (Chooser Mode)
+
+```dart
+MlkitScannerButton(
+  onResult: (ScanResult result) {
+    if (result.status == "pass") {
+      print("Scanned: ${result.value}");
+    } else {
+      print("Error: ${result.message}");
+    }
+  },
+)
+```
+
+### Specific Mode (Barcode only)
+
+```dart
+MlkitScannerButton(
+  mode: "barcode",
+  onResult: (ScanResult result) {
+    // ...
+  },
+)
+```
+
+### Specific Mode (OCR only)
+
+```dart
+MlkitScannerButton(
+  mode: "ocr",
+  onResult: (ScanResult result) {
+    // ...
+  },
+)
+```
+
+## Models
+
+### ScanResult
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `status` | `String` | "pass" or "fail" |
+| `code` | `String` | Machine-readable code (e.g., "OK", "CANCELLED", "EMPTY") |
+| `value` | `String` | The scanned/recognized text |
+| `message` | `String` | Human-readable message (mainly for errors) |
+| `type` | `String` | "barcode" or "ocr" |
+| `meta` | `Map?` | Optional extra data |
 
 
-Run:
-
-flutter pub get
-
-2) Permissions
+#Permissions 
+Permissions
 Android: android/app/src/main/AndroidManifest.xml
 <uses-permission android:name="android.permission.CAMERA" />
 
 iOS: ios/Runner/Info.plist
 <key>NSCameraUsageDescription</key>
 <string>Camera access is required to scan QR/Barcodes.</string>
-
-
-3) Professional component structure
-lib/
-  components/
-    mlkit_scanner/
-      mlkit_scanner.dart                 # public export (single import)
-      models/
-        scan_result.dart
-      widgets/
-        mlkit_scanner_button.dart
-      pages/
-        mlkit_scanner_page.dart
-
-4) Public export file
-lib/components/mlkit_scanner/mlkit_scanner.dart
-
-5) Return model
-lib/components/mlkit_scanner/models/scan_result.dart
-
-6) Scanner page (Camera + ML Kit)
-lib/components/mlkit_scanner/pages/mlkit_scanner_page.dart
-
-7) Scanner button widget (component API)
-lib/components/mlkit_scanner/widgets/mlkit_scanner_button.dart
-
-8) Use it anywhere in your frontend
-import 'package:your_app/components/mlkit_scanner/mlkit_scanner.dart';
-
-MlkitScannerButton(
-  onResult: (r) {
-    if (r.status == "pass") {
-      // r.value is your QR/barcode value
-    } else {
-      // show r.message to user
-    }
-  },
-)
