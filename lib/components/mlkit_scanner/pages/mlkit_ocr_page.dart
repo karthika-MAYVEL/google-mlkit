@@ -31,9 +31,8 @@ class _MlkitOcrPageState extends State<MlkitOcrPage> {
   bool _busy = false;
   bool _returned = false;
 
-  // Selection state
-  List<TextBlock>? _recognizedBlocks;
-  final Set<int> _selectedBlockIndices = {};
+  // Editing state
+  TextEditingController? _editingController;
 
   @override
   void initState() {
@@ -50,6 +49,7 @@ class _MlkitOcrPageState extends State<MlkitOcrPage> {
   @override
   void dispose() {
     _recognizer.close();
+    _editingController?.dispose();
     super.dispose();
   }
 
@@ -58,8 +58,8 @@ class _MlkitOcrPageState extends State<MlkitOcrPage> {
     setState(() {
       _busy = true;
       _currentScript = newScript;
-      _recognizedBlocks = null;
-      _selectedBlockIndices.clear();
+      _editingController?.dispose();
+      _editingController = null;
     });
     _recognizer.close();
     _recognizer = TextRecognizer(script: _currentScript);
@@ -80,8 +80,8 @@ class _MlkitOcrPageState extends State<MlkitOcrPage> {
 
     setState(() {
       _busy = true;
-      _recognizedBlocks = null;
-      _selectedBlockIndices.clear();
+      _editingController?.dispose();
+      _editingController = null;
     });
 
     try {
@@ -133,11 +133,8 @@ class _MlkitOcrPageState extends State<MlkitOcrPage> {
       }
 
       setState(() {
-        _recognizedBlocks = recognized.blocks;
-        // Default select all
-        for (int i = 0; i < recognized.blocks.length; i++) {
-          _selectedBlockIndices.add(i);
-        }
+        final String fullText = recognized.blocks.map((b) => b.text).join("\n");
+        _editingController = TextEditingController(text: fullText);
         _busy = false;
       });
     } catch (e) {
@@ -148,27 +145,27 @@ class _MlkitOcrPageState extends State<MlkitOcrPage> {
         message: e.toString(),
       ));
     } finally {
-      if (mounted && _recognizedBlocks == null) {
+      if (mounted && _editingController == null) {
         setState(() => _busy = false);
       }
     }
   }
 
-  void _confirmSelection() {
-    if (_recognizedBlocks == null || _selectedBlockIndices.isEmpty) return;
+  void _confirmResult() {
+    if (_editingController == null) return;
 
-    final List<String> selectedTexts = [];
-    final List<int> sortedIndices = _selectedBlockIndices.toList()..sort();
-    
-    for (final index in sortedIndices) {
-      selectedTexts.add(_recognizedBlocks![index].text);
+    final String finalValue = _editingController!.text.trim();
+
+    if (finalValue.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Text cannot be empty.")),
+      );
+      return;
     }
-
-    final String finalValue = selectedTexts.join("\n").trim();
 
     if (finalValue.length > widget.maxValueLength) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Selected text is too large to process.")),
+        const SnackBar(content: Text("Text is too large to process.")),
       );
       return;
     }
@@ -202,17 +199,17 @@ class _MlkitOcrPageState extends State<MlkitOcrPage> {
           ),
         ],
       ),
-      body: _recognizedBlocks != null ? _buildSelectionUI() : _buildCaptureUI(),
-      bottomNavigationBar: _recognizedBlocks != null
+      body: _editingController != null ? _buildEditUI() : _buildCaptureUI(),
+      bottomNavigationBar: _editingController != null
           ? SafeArea(
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: ElevatedButton(
-                  onPressed: _selectedBlockIndices.isEmpty ? null : _confirmSelection,
+                  onPressed: _confirmResult,
                   style: ElevatedButton.styleFrom(
                     minimumSize: const Size.fromHeight(50),
                   ),
-                  child: Text('Confirm Selection (${_selectedBlockIndices.length})'),
+                  child: const Text('Confirm & Save Text'),
                 ),
               ),
             )
@@ -273,75 +270,39 @@ class _MlkitOcrPageState extends State<MlkitOcrPage> {
     );
   }
 
-  Widget _buildSelectionUI() {
+  Widget _buildEditUI() {
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Select text to keep:',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-              Row(
-                children: [
-                  TextButton(
-                    onPressed: () {
-                      setState(() {
-                        for (int i = 0; i < _recognizedBlocks!.length; i++) {
-                          _selectedBlockIndices.add(i);
-                        }
-                      });
-                    },
-                    child: const Text('Select All'),
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      setState(() {
-                        _selectedBlockIndices.clear();
-                      });
-                    },
-                    child: const Text('Clear'),
-                  ),
-                ],
-              ),
-            ],
+        const Padding(
+          padding: EdgeInsets.all(16.0),
+          child: Text(
+            'Review and edit recognized text:',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
         ),
         const Divider(height: 1),
         Expanded(
-          child: ListView.separated(
-            itemCount: _recognizedBlocks!.length,
-            separatorBuilder: (context, index) => const Divider(height: 1),
-            itemBuilder: (context, index) {
-              final block = _recognizedBlocks![index];
-              final isSelected = _selectedBlockIndices.contains(index);
-              return CheckboxListTile(
-                value: isSelected,
-                onChanged: (val) {
-                  setState(() {
-                    if (val == true) {
-                      _selectedBlockIndices.add(index);
-                    } else {
-                      _selectedBlockIndices.remove(index);
-                    }
-                  });
-                },
-                title: Text(block.text),
-                controlAffinity: ListTileControlAffinity.leading,
-              );
-            },
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: TextField(
+              controller: _editingController,
+              maxLines: null,
+              expands: true,
+              textAlignVertical: TextAlignVertical.top,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: 'Recognized text will appear here...',
+              ),
+            ),
           ),
         ),
         Padding(
-          padding: const EdgeInsets.all(8.0),
+          padding: const EdgeInsets.symmetric(vertical: 8.0),
           child: TextButton.icon(
             onPressed: () {
               setState(() {
-                _recognizedBlocks = null;
-                _selectedBlockIndices.clear();
+                _editingController?.dispose();
+                _editingController = null;
               });
               _captureAndRead();
             },
