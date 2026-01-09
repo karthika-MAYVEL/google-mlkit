@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
+import 'package:image/image.dart' as img;
 
 import '../models/scan_result.dart';
 
@@ -31,7 +32,8 @@ class _MlkitOcrPageState extends State<MlkitOcrPage> {
   bool _busy = false;
   bool _returned = false;
 
-  // Editing state
+  // State for current image and results
+  File? _currentImageFile;
   TextEditingController? _editingController;
 
   @override
@@ -63,9 +65,13 @@ class _MlkitOcrPageState extends State<MlkitOcrPage> {
     });
     _recognizer.close();
     _recognizer = TextRecognizer(script: _currentScript);
-    setState(() {
-      _busy = false;
-    });
+    
+    // If we have an image, re-run OCR with the new script
+    if (_currentImageFile != null) {
+      _processImage(_currentImageFile!);
+    } else {
+      setState(() => _busy = false);
+    }
   }
 
   void _returnOnce(ScanResult r) {
@@ -75,6 +81,47 @@ class _MlkitOcrPageState extends State<MlkitOcrPage> {
     Navigator.of(context).pop(r);
   }
 
+  /// Physically rotates the image file and re-runs OCR
+  Future<void> _rotateImage() async {
+    if (_currentImageFile == null || _busy) return;
+    setState(() => _busy = true);
+
+    try {
+      final bytes = await _currentImageFile!.readAsBytes();
+      final image = img.decodeImage(bytes);
+      if (image != null) {
+        final rotated = img.copyRotate(image, angle: 90);
+        final rotatedBytes = img.encodeJpg(rotated);
+        await _currentImageFile!.writeAsBytes(rotatedBytes);
+        await _processImage(_currentImageFile!);
+      }
+    } catch (e) {
+      debugPrint("Rotation error: $e");
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Ensures the image is correctly oriented based on EXIF data
+  Future<File> _fixOrientation(File file) async {
+    try {
+      final bytes = await file.readAsBytes();
+      final image = img.decodeImage(bytes);
+      if (image == null) return file;
+
+      // bakeOrientation applies EXIF rotation to pixel data
+      final fixedImage = img.bakeOrientation(image);
+      final fixedBytes = img.encodeJpg(fixedImage);
+      
+      // Save back to the same file or a temp one
+      await file.writeAsBytes(fixedBytes);
+      return file;
+    } catch (e) {
+      debugPrint("Orientation fix error: $e");
+      return file;
+    }
+  }
+
   Future<void> _captureAndRead() async {
     if (_busy) return;
 
@@ -82,6 +129,7 @@ class _MlkitOcrPageState extends State<MlkitOcrPage> {
       _busy = true;
       _editingController?.dispose();
       _editingController = null;
+      _currentImageFile = null;
     });
 
     try {
@@ -158,27 +206,13 @@ class _MlkitOcrPageState extends State<MlkitOcrPage> {
           return;
         }
         finalFile = File(croppedFile.path);
+      } else {
+        // Automatically fix orientation for "Use Directly" flow
+        finalFile = await _fixOrientation(finalFile);
       }
 
-      // 4. Recognize Text
-      final inputImage = InputImage.fromFile(finalFile);
-      final RecognizedText recognized = await _recognizer.processImage(inputImage);
-
-      if (recognized.blocks.isEmpty) {
-        _returnOnce(const ScanResult(
-          status: "fail",
-          code: "EMPTY",
-          value: "",
-          message: "No text detected. Try again with better lighting or focus.",
-        ));
-        return;
-      }
-
-      setState(() {
-        final String fullText = recognized.blocks.map((b) => b.text).join("\n");
-        _editingController = TextEditingController(text: fullText);
-        _busy = false;
-      });
+      _currentImageFile = finalFile;
+      await _processImage(finalFile);
     } catch (e) {
       _returnOnce(ScanResult(
         status: "fail",
@@ -190,6 +224,34 @@ class _MlkitOcrPageState extends State<MlkitOcrPage> {
       if (mounted && _editingController == null) {
         setState(() => _busy = false);
       }
+    }
+  }
+
+  Future<void> _processImage(File file) async {
+    try {
+      final inputImage = InputImage.fromFile(file);
+      final RecognizedText recognized = await _recognizer.processImage(inputImage);
+
+      if (recognized.blocks.isEmpty) {
+        setState(() {
+          _editingController = TextEditingController(text: "");
+          _busy = false;
+        });
+        // We don't pop immediately, let them rotate or retake
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("No text detected. Try rotating the image.")),
+        );
+        return;
+      }
+
+      setState(() {
+        final String fullText = recognized.blocks.map((b) => b.text).join("\n");
+        _editingController = TextEditingController(text: fullText);
+        _busy = false;
+      });
+    } catch (e) {
+      debugPrint("OCR Error: $e");
+      setState(() => _busy = false);
     }
   }
 
@@ -315,11 +377,24 @@ class _MlkitOcrPageState extends State<MlkitOcrPage> {
   Widget _buildEditUI() {
     return Column(
       children: [
-        const Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Text(
-            'Review and edit recognized text:',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Review and edit text:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              if (_busy)
+                const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+              else
+                TextButton.icon(
+                  onPressed: _rotateImage,
+                  icon: const Icon(Icons.rotate_right),
+                  label: const Text('Rotate 90°'),
+                ),
+            ],
           ),
         ),
         const Divider(height: 1),
@@ -340,16 +415,22 @@ class _MlkitOcrPageState extends State<MlkitOcrPage> {
         ),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 8.0),
-          child: TextButton.icon(
-            onPressed: () {
-              setState(() {
-                _editingController?.dispose();
-                _editingController = null;
-              });
-              _captureAndRead();
-            },
-            icon: const Icon(Icons.refresh),
-            label: const Text('Retake Photo'),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              TextButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _editingController?.dispose();
+                    _editingController = null;
+                    _currentImageFile = null;
+                  });
+                  _captureAndRead();
+                },
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retake Photo'),
+              ),
+            ],
           ),
         ),
       ],
