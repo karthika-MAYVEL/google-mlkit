@@ -96,30 +96,72 @@ class _MlkitOcrPageState extends State<MlkitOcrPage> {
         return;
       }
 
-      // 2. Crop Image
-      final croppedFile = await ImageCropper().cropImage(
-        sourcePath: xfile.path,
-        uiSettings: [
-          AndroidUiSettings(
-            toolbarTitle: 'Crop Image',
-            toolbarColor: Theme.of(context).colorScheme.primary,
-            toolbarWidgetColor: Colors.white,
-            initAspectRatio: CropAspectRatioPreset.original,
-            lockAspectRatio: false,
+      // 2. Provide Choice: Crop or Use Image
+      final String? choice = await showModalBottomSheet<String>(
+        context: context,
+        builder: (context) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text(
+                  'Image Captured',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.crop),
+                title: const Text('Crop Image'),
+                subtitle: const Text('Refine the area for better accuracy'),
+                onTap: () => Navigator.pop(context, 'crop'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.check),
+                title: const Text('Use Image Directly'),
+                subtitle: const Text('Scan the entire photo'),
+                onTap: () => Navigator.pop(context, 'use'),
+              ),
+              const SizedBox(height: 8),
+            ],
           ),
-          IOSUiSettings(
-            title: 'Crop Image',
-          ),
-        ],
+        ),
       );
 
-      if (croppedFile == null) {
+      if (choice == null) {
         setState(() => _busy = false);
         return;
       }
 
-      // 3. Recognize Text
-      final inputImage = InputImage.fromFile(File(croppedFile.path));
+      File finalFile = File(xfile.path);
+
+      if (choice == 'crop') {
+        // 3. Crop Image
+        final croppedFile = await ImageCropper().cropImage(
+          sourcePath: xfile.path,
+          uiSettings: [
+            AndroidUiSettings(
+              toolbarTitle: 'Crop Image',
+              toolbarColor: Theme.of(context).colorScheme.primary,
+              toolbarWidgetColor: Colors.white,
+              initAspectRatio: CropAspectRatioPreset.original,
+              lockAspectRatio: false,
+            ),
+            IOSUiSettings(
+              title: 'Crop Image',
+            ),
+          ],
+        );
+
+        if (croppedFile == null) {
+          setState(() => _busy = false);
+          return;
+        }
+        finalFile = File(croppedFile.path);
+      }
+
+      // 4. Recognize Text
+      final inputImage = InputImage.fromFile(finalFile);
       final RecognizedText recognized = await _recognizer.processImage(inputImage);
 
       if (recognized.blocks.isEmpty) {
