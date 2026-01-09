@@ -11,10 +11,12 @@ class MlkitOcrPage extends StatefulWidget {
     super.key,
     required this.title,
     required this.maxValueLength,
+    this.initialScript = TextRecognitionScript.latin,
   });
 
   final String title;
   final int maxValueLength;
+  final TextRecognitionScript initialScript;
 
   @override
   State<MlkitOcrPage> createState() => _MlkitOcrPageState();
@@ -22,7 +24,8 @@ class MlkitOcrPage extends StatefulWidget {
 
 class _MlkitOcrPageState extends State<MlkitOcrPage> {
   final ImagePicker _picker = ImagePicker();
-  late final TextRecognizer _recognizer;
+  late TextRecognizer _recognizer;
+  late TextRecognitionScript _currentScript;
 
   bool _busy = false;
   bool _returned = false;
@@ -30,7 +33,8 @@ class _MlkitOcrPageState extends State<MlkitOcrPage> {
   @override
   void initState() {
     super.initState();
-    _recognizer = TextRecognizer(script: TextRecognitionScript.latin);
+    _currentScript = widget.initialScript;
+    _recognizer = TextRecognizer(script: _currentScript);
 
     // Optional UX: open camera immediately when page opens
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -42,6 +46,19 @@ class _MlkitOcrPageState extends State<MlkitOcrPage> {
   void dispose() {
     _recognizer.close();
     super.dispose();
+  }
+
+  void _updateScript(TextRecognitionScript? newScript) {
+    if (newScript == null || newScript == _currentScript) return;
+    setState(() {
+      _busy = true;
+      _currentScript = newScript;
+    });
+    _recognizer.close();
+    _recognizer = TextRecognizer(script: _currentScript);
+    setState(() {
+      _busy = false;
+    });
   }
 
   void _returnOnce(ScanResult r) {
@@ -63,12 +80,9 @@ class _MlkitOcrPageState extends State<MlkitOcrPage> {
       );
 
       if (xfile == null) {
-        _returnOnce(const ScanResult(
-          status: "fail",
-          code: "CANCELLED",
-          value: "",
-          message: "Scan cancelled.",
-        ));
+        // Don't pop if they just cancelled the image picker, 
+        // let them try again or use the manual button.
+        setState(() => _busy = false);
         return;
       }
 
@@ -137,19 +151,54 @@ class _MlkitOcrPageState extends State<MlkitOcrPage> {
         ],
       ),
       body: Center(
-        child: _busy
-            ? const CircularProgressIndicator()
-            : Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('Capture an image to read text'),
-                  const SizedBox(height: 12),
-                  ElevatedButton(
-                    onPressed: _captureAndRead,
-                    child: const Text('Capture & Read Text'),
-                  ),
-                ],
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Select Language Script:',
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
+              const SizedBox(height: 8),
+              DropdownButton<TextRecognitionScript>(
+                value: _currentScript,
+                isExpanded: true,
+                onChanged: _updateScript,
+                items: TextRecognitionScript.values.map((script) {
+                  return DropdownMenuItem(
+                    value: script,
+                    child: Text(script.name.toUpperCase()),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 32),
+              if (_busy)
+                const CircularProgressIndicator()
+              else ...[
+                const Text(
+                  'Capture an image to read text',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: _captureAndRead,
+                  icon: const Icon(Icons.camera_alt),
+                  label: const Text('Capture & Read Text'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 24),
+              const Text(
+                'Note: Tamil is not yet supported by ML Kit OCR. Use Devanagari for Hindi/Marathi.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

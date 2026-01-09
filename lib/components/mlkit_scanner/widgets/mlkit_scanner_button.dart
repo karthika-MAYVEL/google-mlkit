@@ -11,6 +11,7 @@
 //
 
 import 'package:flutter/material.dart';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import '../models/scan_result.dart';
 import '../pages/mlkit_scanner_page.dart';
 import '../pages/mlkit_ocr_page.dart';
@@ -25,6 +26,7 @@ class MlkitScannerButton extends StatefulWidget {
     this.tooltip = "Scan QR/Barcode",
     this.title = "Scan",
     this.mode = "chooser", // "barcode" | "ocr" | "chooser"
+    this.defaultOcrScript = TextRecognitionScript.latin,
   });
 
   final void Function(ScanResult result) onResult;
@@ -37,6 +39,7 @@ class MlkitScannerButton extends StatefulWidget {
 
   final String title;
   final String mode;
+  final TextRecognitionScript defaultOcrScript;
 
   @override
   State<MlkitScannerButton> createState() => _MlkitScannerButtonState();
@@ -85,6 +88,7 @@ class _MlkitScannerButtonState extends State<MlkitScannerButton> {
               ? MlkitOcrPage(
                   title: "OCR Scanner",
                   maxValueLength: widget.maxValueLength,
+                  initialScript: widget.defaultOcrScript,
                 )
               : MlkitScannerPage(
                   timeoutSeconds: widget.timeoutSeconds,
