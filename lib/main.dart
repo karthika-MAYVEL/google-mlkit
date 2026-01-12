@@ -11,7 +11,8 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'ML Kit Scanner Demo',
+      title: 'Scanner Demo',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
@@ -31,29 +32,32 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   final TextEditingController _controller = TextEditingController();
 
-  void _openScanner() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (context) => FractionallySizedBox(
-        heightFactor: 0.9,
-        child: MlkitScannerWidget(
-          onResult: (result) {
-            if (result['success'] == true) {
-              setState(() {
-                _controller.text = result['value'];
-              });
-              Navigator.pop(context);
-            } else {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(result['message'])),
-              );
-            }
-          },
-        ),
-      ),
-    );
+  Future<void> _triggerScanner() async {
+    // Using the global static method to open the scanner
+    final result = await MlkitScanner.scan(context);
+    
+    if (result != null && result['success'] == true) {
+      setState(() {
+        _controller.text = result['value'];
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Scanned ${result['scanType'].toString().toUpperCase()} successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } else if (result != null && result['success'] == false) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message']),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -66,45 +70,81 @@ class _MyHomePageState extends State<MyHomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ML Kit Scanner Demo'),
+        title: const Text('Global Scanner Demo'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              const Text(
-                'Enter text or scan to add data',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
-              ),
-              const SizedBox(height: 20),
-              TextField(
-                controller: _controller,
-                maxLines: null,
-                decoration: InputDecoration(
-                  hintText: 'Type here...',
-                  border: const OutlineInputBorder(),
-                  suffixIcon: IconButton(
-                    icon: const Icon(Icons.qr_code_scanner, color: Colors.blue),
-                    onPressed: _openScanner,
-                    tooltip: 'Open Scanner',
-                  ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            const Card(
+              child: Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Column(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.blue, size: 32),
+                    SizedBox(height: 12),
+                    Text(
+                      'This demo shows how to use the MlkitScanner as a global component.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 16),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 40),
-              ElevatedButton(
-                onPressed: () {
-                  setState(() {
-                    _controller.clear();
-                  });
-                },
-                child: const Text('Clear Field'),
+            ),
+            const SizedBox(height: 32),
+            const Text(
+              'Integrated Input Field',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _controller,
+              maxLines: null,
+              decoration: InputDecoration(
+                hintText: 'Scan or type data here...',
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.qr_code_scanner, color: Colors.blue),
+                  onPressed: _triggerScanner,
+                  tooltip: 'Open Scanner',
+                ),
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 32),
+            const Text(
+              'Global Trigger Buttons',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              onPressed: _triggerScanner,
+              icon: const Icon(Icons.camera_alt),
+              label: const Text('Open Scanner Anywhere'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () => setState(() => _controller.clear()),
+              icon: const Icon(Icons.clear_all),
+              label: const Text('Clear All Data'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+            ),
+          ],
         ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _triggerScanner,
+        tooltip: 'Quick Scan',
+        child: const Icon(Icons.qr_code_scanner),
       ),
     );
   }

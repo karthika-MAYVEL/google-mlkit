@@ -5,16 +5,36 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 enum ScannerView { selection, ocrOptions, qrScanner }
 
-class MlkitScannerWidget extends StatefulWidget {
+class MlkitScanner extends StatefulWidget {
   final Function(Map<String, dynamic> result) onResult;
 
-  const MlkitScannerWidget({super.key, required this.onResult});
+  const MlkitScanner({super.key, required this.onResult});
+
+  /// Static method to open the scanner globally.
+  /// Returns the structured result map or null if dismissed.
+  static Future<Map<String, dynamic>?> scan(BuildContext context) async {
+    return await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => FractionallySizedBox(
+        heightFactor: 0.95,
+        child: ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          child: MlkitScanner(
+            onResult: (result) => Navigator.pop(context, result),
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
-  State<MlkitScannerWidget> createState() => _MlkitScannerWidgetState();
+  State<MlkitScanner> createState() => _MlkitScannerState();
 }
 
-class _MlkitScannerWidgetState extends State<MlkitScannerWidget> {
+class _MlkitScannerState extends State<MlkitScanner> {
   final ScannerService _scannerService = ScannerService();
   final ImagePicker _imagePicker = ImagePicker();
   
@@ -74,34 +94,49 @@ class _MlkitScannerWidgetState extends State<MlkitScannerWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: Colors.white,
-      child: Column(
-        children: [
-          _buildHeader(),
-          Expanded(
-            child: _buildBody(),
-          ),
-        ],
-      ),
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: _buildAppBar(),
+      body: _buildBody(),
     );
   }
 
-  Widget _buildHeader() {
+  PreferredSizeWidget _buildAppBar() {
+    String title = 'Scanner';
+    if (_currentView == ScannerView.ocrOptions) title = 'OCR Options';
+    if (_currentView == ScannerView.qrScanner) title = 'QR / Barcode';
+
     return AppBar(
-      title: const Text('Scanner'),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+      centerTitle: true,
       leading: IconButton(
-        icon: const Icon(Icons.close),
-        onPressed: () => Navigator.pop(context),
+        icon: Icon(_currentView == ScannerView.selection ? Icons.close : Icons.arrow_back),
+        onPressed: () {
+          if (_currentView == ScannerView.selection) {
+            Navigator.pop(context);
+          } else {
+            setState(() => _currentView = ScannerView.selection);
+          }
+        },
       ),
-      backgroundColor: Colors.blue,
-      foregroundColor: Colors.white,
+      backgroundColor: Colors.white,
+      elevation: 0,
+      foregroundColor: Colors.black,
     );
   }
 
   Widget _buildBody() {
     if (_isProcessing) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Processing image...', style: TextStyle(color: Colors.grey)),
+          ],
+        ),
+      );
     }
 
     switch (_currentView) {
@@ -115,51 +150,109 @@ class _MlkitScannerWidgetState extends State<MlkitScannerWidget> {
   }
 
   Widget _buildSelectionView() {
-    return Center(
+    return Padding(
+      padding: const EdgeInsets.all(24.0),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _largeButton(
-            icon: Icons.text_fields,
-            label: 'OCR (Text Recognition)',
-            onPressed: () => setState(() => _currentView = ScannerView.ocrOptions),
+          const Text(
+            'Choose Scanning Mode',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 30),
-          _largeButton(
-            icon: Icons.qr_code_scanner,
-            label: 'QR / Barcode',
-            onPressed: () => setState(() => _currentView = ScannerView.qrScanner),
+          const SizedBox(height: 8),
+          const Text(
+            'Select the type of data you want to capture',
+            style: TextStyle(color: Colors.grey),
+            textAlign: TextAlign.center,
           ),
+          const Spacer(),
+          _selectionCard(
+            icon: Icons.qr_code_scanner_rounded,
+            title: 'QR / Barcode',
+            description: 'Scan any standard QR or Barcode instantly.',
+            color: Colors.blue,
+            onTap: () => setState(() => _currentView = ScannerView.qrScanner),
+          ),
+          const SizedBox(height: 20),
+          _selectionCard(
+            icon: Icons.text_snippet_rounded,
+            title: 'OCR Text Recognition',
+            description: 'Extract text from documents or images.',
+            color: Colors.orange,
+            onTap: () => setState(() => _currentView = ScannerView.ocrOptions),
+          ),
+          const Spacer(flex: 2),
         ],
       ),
     );
   }
 
+  Widget _selectionCard({
+    required IconData icon,
+    required String title,
+    required String description,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade200),
+          borderRadius: BorderRadius.circular(16),
+          color: color.withValues(alpha: 0.05),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: Colors.white, size: 32),
+            ),
+            const SizedBox(width: 20),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  Text(description, style: TextStyle(color: Colors.grey.shade600, fontSize: 14)),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: Colors.grey.shade400),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildOCROptionsView() {
-    return Center(
+    return Padding(
+      padding: const EdgeInsets.all(24.0),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            'OCR Options',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 40),
-          _largeButton(
-            icon: Icons.photo_library,
-            label: 'Upload from Gallery',
-            onPressed: () => _processOCR(ImageSource.gallery),
+          _selectionCard(
+            icon: Icons.camera_alt_rounded,
+            title: 'Capture with Camera',
+            description: 'Take a photo of the text you want to scan.',
+            color: Colors.green,
+            onTap: () => _processOCR(ImageSource.camera),
           ),
           const SizedBox(height: 20),
-          _largeButton(
-            icon: Icons.camera_alt,
-            label: 'Capture from Camera',
-            onPressed: () => _processOCR(ImageSource.camera),
-          ),
-          const SizedBox(height: 40),
-          TextButton(
-            onPressed: () => setState(() => _currentView = ScannerView.selection),
-            child: const Text('Back'),
+          _selectionCard(
+            icon: Icons.photo_library_rounded,
+            title: 'Upload from Gallery',
+            description: 'Pick an existing image from your device.',
+            color: Colors.purple,
+            onTap: () => _processOCR(ImageSource.gallery),
           ),
         ],
       ),
@@ -174,14 +267,20 @@ class _MlkitScannerWidgetState extends State<MlkitScannerWidget> {
         ),
         _buildOverlay(),
         Positioned(
-          bottom: 40,
+          top: 20,
           left: 0,
           right: 0,
           child: Center(
-            child: TextButton(
-              onPressed: () => setState(() => _currentView = ScannerView.selection),
-              style: TextButton.styleFrom(backgroundColor: Colors.black54, foregroundColor: Colors.white),
-              child: const Text('Back'),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Text(
+                'Align QR code within the frame',
+                style: TextStyle(color: Colors.white, fontSize: 14),
+              ),
             ),
           ),
         ),
@@ -194,34 +293,10 @@ class _MlkitScannerWidgetState extends State<MlkitScannerWidget> {
       decoration: ShapeDecoration(
         shape: ScannerOverlayShape(
           borderColor: Colors.blue,
-          borderRadius: 10,
-          borderLength: 30,
-          borderWidth: 10,
-          cutOutSize: 250,
-        ),
-      ),
-    );
-  }
-
-  Widget _largeButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onPressed,
-  }) {
-    return SizedBox(
-      width: 250,
-      height: 60,
-      child: ElevatedButton.icon(
-        onPressed: onPressed,
-        icon: Icon(icon),
-        label: Text(label),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.blue,
-          foregroundColor: Colors.white,
-          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
+          borderRadius: 20,
+          borderLength: 40,
+          borderWidth: 8,
+          cutOutSize: 280,
         ),
       ),
     );
@@ -288,20 +363,32 @@ class ScannerOverlayShape extends ShapeBorder {
     final borderPaint = Paint()
       ..color = borderColor
       ..style = PaintingStyle.stroke
-      ..strokeWidth = borderWidth;
+      ..strokeWidth = borderWidth
+      ..strokeCap = StrokeCap.round;
 
     final path = Path();
+    // Top left
     path.moveTo(cutOutRect.left, cutOutRect.top + borderLength);
-    path.lineTo(cutOutRect.left, cutOutRect.top);
+    path.lineTo(cutOutRect.left, cutOutRect.top + borderRadius);
+    path.arcToPoint(Offset(cutOutRect.left + borderRadius, cutOutRect.top), radius: Radius.circular(borderRadius), clockwise: true);
     path.lineTo(cutOutRect.left + borderLength, cutOutRect.top);
+
+    // Top right
     path.moveTo(cutOutRect.right - borderLength, cutOutRect.top);
-    path.lineTo(cutOutRect.right, cutOutRect.top);
+    path.lineTo(cutOutRect.right - borderRadius, cutOutRect.top);
+    path.arcToPoint(Offset(cutOutRect.right, cutOutRect.top + borderRadius), radius: Radius.circular(borderRadius), clockwise: true);
     path.lineTo(cutOutRect.right, cutOutRect.top + borderLength);
+
+    // Bottom right
     path.moveTo(cutOutRect.right, cutOutRect.bottom - borderLength);
-    path.lineTo(cutOutRect.right, cutOutRect.bottom);
+    path.lineTo(cutOutRect.right, cutOutRect.bottom - borderRadius);
+    path.arcToPoint(Offset(cutOutRect.right - borderRadius, cutOutRect.bottom), radius: Radius.circular(borderRadius), clockwise: true);
     path.lineTo(cutOutRect.right - borderLength, cutOutRect.bottom);
+
+    // Bottom left
     path.moveTo(cutOutRect.left + borderLength, cutOutRect.bottom);
-    path.lineTo(cutOutRect.left, cutOutRect.bottom);
+    path.lineTo(cutOutRect.left + borderRadius, cutOutRect.bottom);
+    path.arcToPoint(Offset(cutOutRect.left, cutOutRect.bottom - borderRadius), radius: Radius.circular(borderRadius), clockwise: true);
     path.lineTo(cutOutRect.left, cutOutRect.bottom - borderLength);
 
     canvas.drawPath(path, borderPaint);

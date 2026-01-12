@@ -1,63 +1,54 @@
-# ML Kit Scanner Demo
+# ML Kit Global Scanner Component
 
-A Flutter application demonstrating a simplified and robust integration of Google ML Kit for OCR (Text Recognition) and `mobile_scanner` for QR/Barcode scanning.
+A professional, reusable Flutter component for QR/Barcode scanning and OCR (Text Recognition) using Google ML Kit and `mobile_scanner`.
 
 ## Features
 
-- **QR / Barcode Scanning**: High-performance scanning using the `mobile_scanner` package.
-- **OCR (Text Recognition)**: Extract text from images using Google ML Kit.
-- **Gallery & Camera Support**: Process images directly from the camera or pick them from the device gallery.
-- **Structured Output**: Consistent response format for easy integration into any UI.
-- **Simple UI**: Integrated scanner button within a text field for a seamless user experience.
+- **Global Reusability**: Easily trigger the scanner from anywhere in your app using a static method.
+- **Professional UI**: Polished selection screens, scanning overlays, and animations.
+- **QR / Barcode Scanning**: High-performance scanning using `mobile_scanner`.
+- **OCR (Text Recognition)**: Extract text from images or camera captures using Google ML Kit.
+- **Structured Output**: Returns a consistent data format for easy integration.
 
 ## Getting Started
 
-### Prerequisites
-
-- Flutter SDK (latest stable version recommended)
-- Android Studio / VS Code with Flutter extension
-- A physical device (recommended for camera features)
-
 ### Installation
 
-1.  **Clone the repository**:
-    ```bash
-    git clone <repository-url>
-    cd google-mlkit
+1.  **Add dependencies** to your `pubspec.yaml`:
+    ```yaml
+    dependencies:
+      mobile_scanner: ^6.0.0
+      google_mlkit_text_recognition: ^0.14.0
+      image_picker: ^1.1.2
+      permission_handler: ^11.3.1
     ```
 
-2.  **Install dependencies**:
-    ```bash
-    flutter pub get
-    ```
-
-3.  **Run the app**:
-    ```bash
-    flutter run
-    ```
-
-## Project Structure
-
-- `lib/main.dart`: Entry point and main UI with the integrated scanner field.
-- `lib/widgets/mlkit_scanner_widget.dart`: Reusable scanner component with OCR and QR flows.
-- `lib/services/scanner_service.dart`: Encapsulates ML Kit OCR logic.
-
-## Configuration
-
-### Android
-Permissions are already configured in `android/app/src/main/AndroidManifest.xml`:
-- `android.permission.CAMERA`
-- `android.permission.READ_EXTERNAL_STORAGE`
-- `android.permission.WRITE_EXTERNAL_STORAGE`
-
-### iOS
-Permissions are configured in `ios/Runner/Info.plist`:
-- `NSCameraUsageDescription`: Required for scanning.
-- `NSPhotoLibraryUsageDescription`: Required for gallery uploads.
+2.  **Configure Permissions**:
+    - **Android**: Add `CAMERA` and storage permissions to `AndroidManifest.xml`.
+    - **iOS**: Add `NSCameraUsageDescription` and `NSPhotoLibraryUsageDescription` to `Info.plist`.
 
 ## Usage
 
-The scanner returns a structured JSON-like response:
+### Global Trigger
+
+You can open the scanner from any `BuildContext` using the static `scan` method:
+
+```dart
+import 'package:google_mlkit/widgets/mlkit_scanner_widget.dart';
+
+void _onScanPressed() async {
+  final result = await MlkitScanner.scan(context);
+  
+  if (result != null && result['success'] == true) {
+    print("Scanned value: ${result['value']}");
+    print("Scan type: ${result['scanType']}");
+  }
+}
+```
+
+### Structured Output Format
+
+The scanner returns a `Map<String, dynamic>`:
 
 ```json
 {
@@ -68,11 +59,12 @@ The scanner returns a structured JSON-like response:
 }
 ```
 
-This response is used to automatically populate the `TextField` on the home screen.
+## Project Structure
 
-## Dependencies
+- `lib/widgets/mlkit_scanner_widget.dart`: The core `MlkitScanner` component.
+- `lib/services/scanner_service.dart`: OCR processing logic.
+- `lib/main.dart`: Demo application showing global integration.
 
-- `mobile_scanner`: High-performance QR/Barcode scanning.
-- `google_mlkit_text_recognition`: Google ML Kit OCR.
-- `image_picker`: Camera and gallery image selection.
-- `permission_handler`: Permission management.
+## Customization
+
+The `MlkitScanner` is designed to be self-contained. You can customize the `ScannerOverlayShape` or the selection cards within `mlkit_scanner_widget.dart` to match your app's branding.
