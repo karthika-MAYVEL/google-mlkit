@@ -15,7 +15,7 @@ class MlkitScannerWidget extends StatefulWidget {
   State<MlkitScannerWidget> createState() => _MlkitScannerWidgetState();
 }
 
-class _MlkitScannerWidgetState extends State<MlkitScannerWidget> {
+class _MlkitScannerWidgetState extends State<MlkitScannerWidget> with WidgetsBindingObserver {
   CameraController? _cameraController;
   final ScannerService _scannerService = ScannerService();
   final ImagePicker _imagePicker = ImagePicker();
@@ -23,41 +23,48 @@ class _MlkitScannerWidgetState extends State<MlkitScannerWidget> {
   bool _isProcessing = false;
   bool _isCameraInitialized = false;
   String? _errorMessage;
+  bool _isPermanentlyDenied = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _initializeCamera();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Re-initialize camera when app returns to foreground if it wasn't initialized
+    if (state == AppLifecycleState.resumed && !_isCameraInitialized) {
+      _initializeCamera();
+    }
   }
 
   Future<void> _initializeCamera() async {
     try {
-      final status = await Permission.camera.request();
+      final status = await Permission.camera.status;
+      
       if (status.isGranted) {
-        final cameras = await availableCameras();
-        if (cameras.isNotEmpty) {
-          _cameraController = CameraController(
-            cameras.first,
-            ResolutionPreset.high,
-            enableAudio: false,
-          );
-
-          await _cameraController!.initialize();
-          if (mounted) {
-            setState(() {
-              _isCameraInitialized = true;
-              _errorMessage = null;
-            });
-          }
+        await _setupCamera();
+      } else if (status.isPermanentlyDenied) {
+        setState(() {
+          _isPermanentlyDenied = true;
+          _errorMessage = 'Camera permission is permanently denied. Please enable it in settings to use the camera scanner.';
+        });
+      } else {
+        final result = await Permission.camera.request();
+        if (result.isGranted) {
+          await _setupCamera();
+        } else if (result.isPermanentlyDenied) {
+          setState(() {
+            _isPermanentlyDenied = true;
+            _errorMessage = 'Camera permission is permanently denied. Please enable it in settings to use the camera scanner.';
+          });
         } else {
           setState(() {
-            _errorMessage = 'No cameras found on this device.';
+            _errorMessage = 'Camera permission denied.';
           });
         }
-      } else {
-        setState(() {
-          _errorMessage = 'Camera permission denied.';
-        });
       }
     } catch (e) {
       debugPrint('Error initializing camera: $e');
@@ -66,6 +73,30 @@ class _MlkitScannerWidgetState extends State<MlkitScannerWidget> {
           _errorMessage = 'Failed to initialize camera: $e';
         });
       }
+    }
+  }
+
+  Future<void> _setupCamera() async {
+    final cameras = await availableCameras();
+    if (cameras.isNotEmpty) {
+      _cameraController = CameraController(
+        cameras.first,
+        ResolutionPreset.high,
+        enableAudio: false,
+      );
+
+      await _cameraController!.initialize();
+      if (mounted) {
+        setState(() {
+          _isCameraInitialized = true;
+          _errorMessage = null;
+          _isPermanentlyDenied = false;
+        });
+      }
+    } else {
+      setState(() {
+        _errorMessage = 'No cameras found on this device.';
+      });
     }
   }
 
@@ -130,6 +161,7 @@ class _MlkitScannerWidgetState extends State<MlkitScannerWidget> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _cameraController?.dispose();
     _scannerService.dispose();
     super.dispose();
@@ -160,10 +192,16 @@ class _MlkitScannerWidgetState extends State<MlkitScannerWidget> {
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 24),
-                    ElevatedButton(
-                      onPressed: _initializeCamera,
-                      child: const Text('Retry Camera'),
-                    ),
+                    if (_isPermanentlyDenied)
+                      ElevatedButton(
+                        onPressed: openAppSettings,
+                        child: const Text('Open Settings'),
+                      )
+                    else
+                      ElevatedButton(
+                        onPressed: _initializeCamera,
+                        child: const Text('Retry Camera'),
+                      ),
                   ],
                 ),
               ),
@@ -227,24 +265,27 @@ class _MlkitScannerWidgetState extends State<MlkitScannerWidget> {
                 icon: const Icon(Icons.photo_library, color: Colors.white, size: 35),
                 onPressed: _pickFromGallery,
               ),
-              GestureDetector(
-                onTap: _takePicture,
-                child: Container(
-                  height: 80,
-                  width: 80,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.8),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.blue, width: 4),
+              if (_isCameraInitialized)
+                GestureDetector(
+                  onTap: _takePicture,
+                  child: Container(
+                    height: 80,
+                    width: 80,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.8),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.blue, width: 4),
+                    ),
+                    child: _isProcessing
+                        ? const Padding(
+                            padding: EdgeInsets.all(20.0),
+                            child: CircularProgressIndicator(),
+                          )
+                        : const Icon(Icons.camera_alt, size: 40, color: Colors.blue),
                   ),
-                  child: _isProcessing
-                      ? const Padding(
-                          padding: EdgeInsets.all(20.0),
-                          child: CircularProgressIndicator(),
-                        )
-                      : const Icon(Icons.camera_alt, size: 40, color: Colors.blue),
-                ),
-              ),
+                )
+              else
+                const SizedBox(width: 80, height: 80),
               const SizedBox(width: 48), // Spacer to balance gallery icon
             ],
           ),
