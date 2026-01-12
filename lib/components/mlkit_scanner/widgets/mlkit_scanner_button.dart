@@ -12,7 +12,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
-import 'package:permission_handler/permission_handler.dart';
 import '../models/scan_result.dart';
 import '../pages/mlkit_scanner_page.dart';
 import '../pages/mlkit_ocr_page.dart';
@@ -54,51 +53,6 @@ class _MlkitScannerButtonState extends State<MlkitScannerButton> {
     _opening = true;
 
     try {
-      // 1. Request Camera Permission Directly
-      var status = await Permission.camera.request();
-
-      if (status.isPermanentlyDenied) {
-        if (mounted) {
-          await showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text("Camera Access Required"),
-              content: const Text("Please enable camera access in settings to use the scanner."),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text("Cancel"),
-                ),
-                TextButton(
-                  onPressed: () {
-                    openAppSettings();
-                    Navigator.pop(context);
-                  },
-                  child: const Text("Open Settings"),
-                ),
-              ],
-            ),
-          );
-        }
-        widget.onResult(const ScanResult(
-          status: "fail",
-          code: "CANCELLED",
-          value: "",
-          message: "Camera permission required.",
-        ));
-        return;
-      }
-
-      if (!status.isGranted) {
-        widget.onResult(const ScanResult(
-          status: "fail",
-          code: "CANCELLED",
-          value: "",
-          message: "Camera permission denied.",
-        ));
-        return;
-      }
-
       String selectedMode = widget.mode;
 
       if (widget.mode == "chooser") {
