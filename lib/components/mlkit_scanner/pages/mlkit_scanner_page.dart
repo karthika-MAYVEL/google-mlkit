@@ -136,6 +136,7 @@ class _MlkitScannerPageState extends State<MlkitScannerPage> {
             code: "OK",
             value: raw,
             message: "",
+            type: "barcode",
           ));
         },
 

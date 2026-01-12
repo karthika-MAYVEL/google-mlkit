@@ -1,3 +1,5 @@
+// pages/mlkit_ocr_page.dart
+
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -279,6 +281,10 @@ class _MlkitOcrPageState extends State<MlkitOcrPage> {
       code: "OK",
       value: finalValue,
       message: "",
+      type: "ocr",
+      meta: {
+        "script": _currentScript.name,
+      },
     ));
   }
 

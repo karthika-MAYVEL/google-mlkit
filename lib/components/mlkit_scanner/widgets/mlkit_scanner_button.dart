@@ -12,6 +12,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../models/scan_result.dart';
 import '../pages/mlkit_scanner_page.dart';
 import '../pages/mlkit_ocr_page.dart';
@@ -53,6 +54,27 @@ class _MlkitScannerButtonState extends State<MlkitScannerButton> {
     _opening = true;
 
     try {
+      // 1. Check/Request Camera Permission
+      final status = await Permission.camera.request();
+      if (status.isPermanentlyDenied) {
+        widget.onResult(const ScanResult(
+          status: "fail",
+          code: "CAMERA_ERROR",
+          value: "",
+          message: "Camera permission is permanently denied. Please enable it in settings.",
+        ));
+        return;
+      }
+      if (!status.isGranted) {
+        widget.onResult(const ScanResult(
+          status: "fail",
+          code: "CAMERA_ERROR",
+          value: "",
+          message: "Camera permission denied.",
+        ));
+        return;
+      }
+
       String selectedMode = widget.mode;
 
       if (widget.mode == "chooser") {
@@ -77,7 +99,15 @@ class _MlkitScannerButtonState extends State<MlkitScannerButton> {
           ),
         );
 
-        if (choice == null) return;
+        if (choice == null) {
+          widget.onResult(const ScanResult(
+            status: "fail",
+            code: "CANCELLED",
+            value: "",
+            message: "Selection cancelled.",
+          ));
+          return;
+        }
         selectedMode = choice;
       }
 
@@ -98,15 +128,25 @@ class _MlkitScannerButtonState extends State<MlkitScannerButton> {
         ),
       );
 
-      widget.onResult(
-        result ??
-            const ScanResult(
-              status: "fail",
-              code: "CANCELLED",
-              value: "",
-              message: "Scan cancelled.",
-            ),
-      );
+      if (result != null) {
+        widget.onResult(result);
+      } else {
+        widget.onResult(
+          const ScanResult(
+            status: "fail",
+            code: "CANCELLED",
+            value: "",
+            message: "Scan cancelled.",
+          ),
+        );
+      }
+    } catch (e) {
+      widget.onResult(ScanResult(
+        status: "fail",
+        code: "CAMERA_ERROR",
+        value: "",
+        message: "Error opening scanner: $e",
+      ));
     } finally {
       _opening = false;
     }
