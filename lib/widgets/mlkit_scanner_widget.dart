@@ -1,10 +1,9 @@
-import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit/services/scanner_service.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 
-enum ScannerView { selection, ocrOptions, camera }
-enum ScanMode { ocr, qr }
+enum ScannerView { selection, ocrOptions, qrScanner }
 
 class MlkitScannerWidget extends StatefulWidget {
   final Function(Map<String, dynamic> result) onResult;
@@ -16,65 +15,40 @@ class MlkitScannerWidget extends StatefulWidget {
 }
 
 class _MlkitScannerWidgetState extends State<MlkitScannerWidget> {
-  CameraController? _cameraController;
   final ScannerService _scannerService = ScannerService();
   final ImagePicker _imagePicker = ImagePicker();
   
   ScannerView _currentView = ScannerView.selection;
-  ScanMode _currentMode = ScanMode.qr;
   bool _isProcessing = false;
-  bool _isCameraInitialized = false;
 
   @override
   void dispose() {
-    _cameraController?.dispose();
     _scannerService.dispose();
     super.dispose();
   }
 
-  Future<void> _initializeCamera() async {
-    final cameras = await availableCameras();
-    if (cameras.isNotEmpty) {
-      _cameraController = CameraController(
-        cameras.first,
-        ResolutionPreset.high,
-        enableAudio: false,
-      );
-
-      try {
-        await _cameraController!.initialize();
-        if (mounted) {
-          setState(() {
-            _isCameraInitialized = true;
-          });
-        }
-      } catch (e) {
-        debugPrint('Error initializing camera: $e');
-      }
-    }
-  }
-
-  Future<void> _processImage(String path) async {
+  Future<void> _processOCR(ImageSource source) async {
     setState(() {
       _isProcessing = true;
     });
 
     try {
-      Map<String, dynamic> result;
-      if (_currentMode == ScanMode.qr) {
-        result = await _scannerService.scanBarcode(path);
+      final XFile? image = await _imagePicker.pickImage(source: source);
+      if (image != null) {
+        final result = await _scannerService.recognizeText(image.path);
+        widget.onResult(result);
       } else {
-        result = await _scannerService.recognizeText(path);
+        setState(() {
+          _isProcessing = false;
+        });
       }
-      widget.onResult(result);
     } catch (e) {
       widget.onResult({
         "success": false,
-        "scanType": _currentMode == ScanMode.qr ? "qr" : "ocr",
+        "scanType": "ocr",
         "value": "",
         "message": "Error: $e"
       });
-    } finally {
       if (mounted) {
         setState(() {
           _isProcessing = false;
@@ -83,52 +57,19 @@ class _MlkitScannerWidgetState extends State<MlkitScannerWidget> {
     }
   }
 
-  Future<void> _takePicture() async {
-    if (_cameraController == null || !_cameraController!.value.isInitialized || _isProcessing) {
-      return;
-    }
-
-    try {
-      final XFile image = await _cameraController!.takePicture();
-      await _processImage(image.path);
-    } catch (e) {
-      debugPrint('Error taking picture: $e');
-    }
-  }
-
-  Future<void> _pickFromGallery() async {
-    if (_isProcessing) return;
-
-    try {
-      final XFile? image = await _imagePicker.pickImage(source: ImageSource.gallery);
-      if (image != null) {
-        await _processImage(image.path);
+  void _onQRDetect(BarcodeCapture capture) {
+    final List<Barcode> barcodes = capture.barcodes;
+    if (barcodes.isNotEmpty) {
+      final String code = barcodes.first.displayValue ?? barcodes.first.rawValue ?? "";
+      if (code.isNotEmpty) {
+        widget.onResult({
+          "success": true,
+          "scanType": "qr",
+          "value": code,
+          "message": "Successful scan"
+        });
       }
-    } catch (e) {
-      debugPrint('Error picking image: $e');
     }
-  }
-
-  void _startQRFlow() {
-    setState(() {
-      _currentMode = ScanMode.qr;
-      _currentView = ScannerView.camera;
-    });
-    _initializeCamera();
-  }
-
-  void _startOCRFlow() {
-    setState(() {
-      _currentMode = ScanMode.ocr;
-      _currentView = ScannerView.ocrOptions;
-    });
-  }
-
-  void _startOCRCamera() {
-    setState(() {
-      _currentView = ScannerView.camera;
-    });
-    _initializeCamera();
   }
 
   @override
@@ -159,13 +100,17 @@ class _MlkitScannerWidgetState extends State<MlkitScannerWidget> {
   }
 
   Widget _buildBody() {
+    if (_isProcessing) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
     switch (_currentView) {
       case ScannerView.selection:
         return _buildSelectionView();
       case ScannerView.ocrOptions:
         return _buildOCROptionsView();
-      case ScannerView.camera:
-        return _buildCameraView();
+      case ScannerView.qrScanner:
+        return _buildQRScannerView();
     }
   }
 
@@ -177,13 +122,13 @@ class _MlkitScannerWidgetState extends State<MlkitScannerWidget> {
           _largeButton(
             icon: Icons.text_fields,
             label: 'OCR (Text Recognition)',
-            onPressed: _startOCRFlow,
+            onPressed: () => setState(() => _currentView = ScannerView.ocrOptions),
           ),
           const SizedBox(height: 30),
           _largeButton(
             icon: Icons.qr_code_scanner,
             label: 'QR / Barcode',
-            onPressed: _startQRFlow,
+            onPressed: () => setState(() => _currentView = ScannerView.qrScanner),
           ),
         ],
       ),
@@ -203,13 +148,13 @@ class _MlkitScannerWidgetState extends State<MlkitScannerWidget> {
           _largeButton(
             icon: Icons.photo_library,
             label: 'Upload from Gallery',
-            onPressed: _pickFromGallery,
+            onPressed: () => _processOCR(ImageSource.gallery),
           ),
           const SizedBox(height: 20),
           _largeButton(
             icon: Icons.camera_alt,
             label: 'Capture from Camera',
-            onPressed: _startOCRCamera,
+            onPressed: () => _processOCR(ImageSource.camera),
           ),
           const SizedBox(height: 40),
           TextButton(
@@ -221,18 +166,25 @@ class _MlkitScannerWidgetState extends State<MlkitScannerWidget> {
     );
   }
 
-  Widget _buildCameraView() {
-    if (!_isCameraInitialized) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
+  Widget _buildQRScannerView() {
     return Stack(
       children: [
-        Positioned.fill(
-          child: CameraPreview(_cameraController!),
+        MobileScanner(
+          onDetect: _onQRDetect,
         ),
         _buildOverlay(),
-        _buildCameraControls(),
+        Positioned(
+          bottom: 40,
+          left: 0,
+          right: 0,
+          child: Center(
+            child: TextButton(
+              onPressed: () => setState(() => _currentView = ScannerView.selection),
+              style: TextButton.styleFrom(backgroundColor: Colors.black54, foregroundColor: Colors.white),
+              child: const Text('Back'),
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -246,34 +198,6 @@ class _MlkitScannerWidgetState extends State<MlkitScannerWidget> {
           borderLength: 30,
           borderWidth: 10,
           cutOutSize: 250,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCameraControls() {
-    return Positioned(
-      bottom: 40,
-      left: 0,
-      right: 0,
-      child: Center(
-        child: GestureDetector(
-          onTap: _takePicture,
-          child: Container(
-            height: 80,
-            width: 80,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.8),
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.blue, width: 4),
-            ),
-            child: _isProcessing
-                ? const Padding(
-                    padding: EdgeInsets.all(20.0),
-                    child: CircularProgressIndicator(),
-                  )
-                : const Icon(Icons.camera_alt, size: 40, color: Colors.blue),
-          ),
         ),
       ),
     );
