@@ -55,24 +55,81 @@ class _MlkitScannerButtonState extends State<MlkitScannerButton> {
 
     try {
       // 1. Check/Request Camera Permission
-      final status = await Permission.camera.request();
-      if (status.isPermanentlyDenied) {
-        widget.onResult(const ScanResult(
-          status: "fail",
-          code: "CAMERA_ERROR",
-          value: "",
-          message: "Camera permission is permanently denied. Please enable it in settings.",
-        ));
-        return;
-      }
+      PermissionStatus status = await Permission.camera.status;
+
       if (!status.isGranted) {
-        widget.onResult(const ScanResult(
-          status: "fail",
-          code: "CAMERA_ERROR",
-          value: "",
-          message: "Camera permission denied.",
-        ));
-        return;
+        if (status.isPermanentlyDenied) {
+          final bool? openSettings = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text("Camera Permission Required"),
+              content: const Text(
+                  "Camera permission is permanently denied. Please enable it in system settings to use the scanner."),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text("Cancel"),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text("Open Settings"),
+                ),
+              ],
+            ),
+          );
+
+          if (openSettings == true) {
+            await openAppSettings();
+          }
+          
+          widget.onResult(const ScanResult(
+            status: "fail",
+            code: "CANCELLED",
+            value: "",
+            message: "Camera permission required.",
+          ));
+          return;
+        }
+
+        // Ask user to allow (Pre-request dialog)
+        final bool? proceed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text("Camera Access"),
+            content: const Text("This app needs camera access to scan QR codes and read text."),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text("Cancel"),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text("Allow"),
+              ),
+            ],
+          ),
+        );
+
+        if (proceed != true) {
+          widget.onResult(const ScanResult(
+            status: "fail",
+            code: "CANCELLED",
+            value: "",
+            message: "Permission request cancelled.",
+          ));
+          return;
+        }
+
+        status = await Permission.camera.request();
+        if (!status.isGranted) {
+          widget.onResult(const ScanResult(
+            status: "fail",
+            code: "CANCELLED",
+            value: "",
+            message: "Camera permission denied.",
+          ));
+          return;
+        }
       }
 
       String selectedMode = widget.mode;
