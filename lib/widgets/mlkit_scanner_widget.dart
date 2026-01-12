@@ -2,12 +2,12 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit/services/scanner_service.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:permission_handler/permission_handler.dart';
 
-enum ScannerMode { barcode, ocr }
+enum ScannerView { selection, ocrOptions, camera }
+enum ScanMode { ocr, qr }
 
 class MlkitScannerWidget extends StatefulWidget {
-  final Function(String result) onResult;
+  final Function(Map<String, dynamic> result) onResult;
 
   const MlkitScannerWidget({super.key, required this.onResult});
 
@@ -15,68 +15,24 @@ class MlkitScannerWidget extends StatefulWidget {
   State<MlkitScannerWidget> createState() => _MlkitScannerWidgetState();
 }
 
-class _MlkitScannerWidgetState extends State<MlkitScannerWidget> with WidgetsBindingObserver {
+class _MlkitScannerWidgetState extends State<MlkitScannerWidget> {
   CameraController? _cameraController;
   final ScannerService _scannerService = ScannerService();
   final ImagePicker _imagePicker = ImagePicker();
-  ScannerMode _currentMode = ScannerMode.barcode;
+  
+  ScannerView _currentView = ScannerView.selection;
+  ScanMode _currentMode = ScanMode.qr;
   bool _isProcessing = false;
   bool _isCameraInitialized = false;
-  String? _errorMessage;
-  bool _isPermanentlyDenied = false;
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _initializeCamera();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Re-initialize camera when app returns to foreground if it wasn't initialized
-    if (state == AppLifecycleState.resumed && !_isCameraInitialized) {
-      _initializeCamera();
-    }
+  void dispose() {
+    _cameraController?.dispose();
+    _scannerService.dispose();
+    super.dispose();
   }
 
   Future<void> _initializeCamera() async {
-    try {
-      final status = await Permission.camera.status;
-      
-      if (status.isGranted) {
-        await _setupCamera();
-      } else if (status.isPermanentlyDenied) {
-        setState(() {
-          _isPermanentlyDenied = true;
-          _errorMessage = 'Camera permission is permanently denied. Please enable it in settings to use the camera scanner.';
-        });
-      } else {
-        final result = await Permission.camera.request();
-        if (result.isGranted) {
-          await _setupCamera();
-        } else if (result.isPermanentlyDenied) {
-          setState(() {
-            _isPermanentlyDenied = true;
-            _errorMessage = 'Camera permission is permanently denied. Please enable it in settings to use the camera scanner.';
-          });
-        } else {
-          setState(() {
-            _errorMessage = 'Camera permission denied.';
-          });
-        }
-      }
-    } catch (e) {
-      debugPrint('Error initializing camera: $e');
-      if (mounted) {
-        setState(() {
-          _errorMessage = 'Failed to initialize camera: $e';
-        });
-      }
-    }
-  }
-
-  Future<void> _setupCamera() async {
     final cameras = await availableCameras();
     if (cameras.isNotEmpty) {
       _cameraController = CameraController(
@@ -85,18 +41,16 @@ class _MlkitScannerWidgetState extends State<MlkitScannerWidget> with WidgetsBin
         enableAudio: false,
       );
 
-      await _cameraController!.initialize();
-      if (mounted) {
-        setState(() {
-          _isCameraInitialized = true;
-          _errorMessage = null;
-          _isPermanentlyDenied = false;
-        });
+      try {
+        await _cameraController!.initialize();
+        if (mounted) {
+          setState(() {
+            _isCameraInitialized = true;
+          });
+        }
+      } catch (e) {
+        debugPrint('Error initializing camera: $e');
       }
-    } else {
-      setState(() {
-        _errorMessage = 'No cameras found on this device.';
-      });
     }
   }
 
@@ -106,24 +60,20 @@ class _MlkitScannerWidgetState extends State<MlkitScannerWidget> with WidgetsBin
     });
 
     try {
-      String? result;
-      if (_currentMode == ScannerMode.barcode) {
+      Map<String, dynamic> result;
+      if (_currentMode == ScanMode.qr) {
         result = await _scannerService.scanBarcode(path);
       } else {
         result = await _scannerService.recognizeText(path);
       }
-
-      if (result != null && result.isNotEmpty) {
-        widget.onResult(result);
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No data detected. Please try again.')),
-          );
-        }
-      }
+      widget.onResult(result);
     } catch (e) {
-      debugPrint('Error processing image: $e');
+      widget.onResult({
+        "success": false,
+        "scanType": _currentMode == ScanMode.qr ? "qr" : "ocr",
+        "value": "",
+        "message": "Error: $e"
+      });
     } finally {
       if (mounted) {
         setState(() {
@@ -159,72 +109,131 @@ class _MlkitScannerWidgetState extends State<MlkitScannerWidget> with WidgetsBin
     }
   }
 
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _cameraController?.dispose();
-    _scannerService.dispose();
-    super.dispose();
+  void _startQRFlow() {
+    setState(() {
+      _currentMode = ScanMode.qr;
+      _currentView = ScannerView.camera;
+    });
+    _initializeCamera();
+  }
+
+  void _startOCRFlow() {
+    setState(() {
+      _currentMode = ScanMode.ocr;
+      _currentView = ScannerView.ocrOptions;
+    });
+  }
+
+  void _startOCRCamera() {
+    setState(() {
+      _currentView = ScannerView.camera;
+    });
+    _initializeCamera();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
+    return Container(
+      color: Colors.white,
+      child: Column(
         children: [
-          if (_isCameraInitialized && _cameraController != null)
-            Positioned.fill(
-              child: CameraPreview(_cameraController!),
-            )
-          else if (_errorMessage != null)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.error_outline, color: Colors.red, size: 60),
-                    const SizedBox(height: 16),
-                    Text(
-                      _errorMessage!,
-                      style: const TextStyle(color: Colors.white, fontSize: 16),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 24),
-                    if (_isPermanentlyDenied)
-                      ElevatedButton(
-                        onPressed: openAppSettings,
-                        child: const Text('Open Settings'),
-                      )
-                    else
-                      ElevatedButton(
-                        onPressed: _initializeCamera,
-                        child: const Text('Retry Camera'),
-                      ),
-                  ],
-                ),
-              ),
-            )
-          else
-            const Center(child: CircularProgressIndicator()),
-          
-          if (_isCameraInitialized) _buildOverlay(),
-          _buildControls(),
-          _buildTopBar(),
+          _buildHeader(),
+          Expanded(
+            child: _buildBody(),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildTopBar() {
-    return Positioned(
-      top: 40,
-      left: 10,
-      child: IconButton(
-        icon: const Icon(Icons.close, color: Colors.white, size: 30),
+  Widget _buildHeader() {
+    return AppBar(
+      title: const Text('Scanner'),
+      leading: IconButton(
+        icon: const Icon(Icons.close),
         onPressed: () => Navigator.pop(context),
       ),
+      backgroundColor: Colors.blue,
+      foregroundColor: Colors.white,
+    );
+  }
+
+  Widget _buildBody() {
+    switch (_currentView) {
+      case ScannerView.selection:
+        return _buildSelectionView();
+      case ScannerView.ocrOptions:
+        return _buildOCROptionsView();
+      case ScannerView.camera:
+        return _buildCameraView();
+    }
+  }
+
+  Widget _buildSelectionView() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          _largeButton(
+            icon: Icons.text_fields,
+            label: 'OCR (Text Recognition)',
+            onPressed: _startOCRFlow,
+          ),
+          const SizedBox(height: 30),
+          _largeButton(
+            icon: Icons.qr_code_scanner,
+            label: 'QR / Barcode',
+            onPressed: _startQRFlow,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOCROptionsView() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Text(
+            'OCR Options',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 40),
+          _largeButton(
+            icon: Icons.photo_library,
+            label: 'Upload from Gallery',
+            onPressed: _pickFromGallery,
+          ),
+          const SizedBox(height: 20),
+          _largeButton(
+            icon: Icons.camera_alt,
+            label: 'Capture from Camera',
+            onPressed: _startOCRCamera,
+          ),
+          const SizedBox(height: 40),
+          TextButton(
+            onPressed: () => setState(() => _currentView = ScannerView.selection),
+            child: const Text('Back'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCameraView() {
+    if (!_isCameraInitialized) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: CameraPreview(_cameraController!),
+        ),
+        _buildOverlay(),
+        _buildCameraControls(),
+      ],
     );
   }
 
@@ -242,71 +251,55 @@ class _MlkitScannerWidgetState extends State<MlkitScannerWidget> with WidgetsBin
     );
   }
 
-  Widget _buildControls() {
+  Widget _buildCameraControls() {
     return Positioned(
       bottom: 40,
       left: 0,
       right: 0,
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _modeButton('Barcode', ScannerMode.barcode),
-              const SizedBox(width: 20),
-              _modeButton('OCR', ScannerMode.ocr),
-            ],
+      child: Center(
+        child: GestureDetector(
+          onTap: _takePicture,
+          child: Container(
+            height: 80,
+            width: 80,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.8),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.blue, width: 4),
+            ),
+            child: _isProcessing
+                ? const Padding(
+                    padding: EdgeInsets.all(20.0),
+                    child: CircularProgressIndicator(),
+                  )
+                : const Icon(Icons.camera_alt, size: 40, color: Colors.blue),
           ),
-          const SizedBox(height: 30),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.photo_library, color: Colors.white, size: 35),
-                onPressed: _pickFromGallery,
-              ),
-              if (_isCameraInitialized)
-                GestureDetector(
-                  onTap: _takePicture,
-                  child: Container(
-                    height: 80,
-                    width: 80,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.8),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.blue, width: 4),
-                    ),
-                    child: _isProcessing
-                        ? const Padding(
-                            padding: EdgeInsets.all(20.0),
-                            child: CircularProgressIndicator(),
-                          )
-                        : const Icon(Icons.camera_alt, size: 40, color: Colors.blue),
-                  ),
-                )
-              else
-                const SizedBox(width: 80, height: 80),
-              const SizedBox(width: 48), // Spacer to balance gallery icon
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _modeButton(String label, ScannerMode mode) {
-    final isSelected = _currentMode == mode;
-    return ElevatedButton(
-      onPressed: () {
-        setState(() {
-          _currentMode = mode;
-        });
-      },
-      style: ElevatedButton.styleFrom(
-        backgroundColor: isSelected ? Colors.blue : Colors.grey[800],
-        foregroundColor: Colors.white,
+  Widget _largeButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+  }) {
+    return SizedBox(
+      width: 250,
+      height: 60,
+      child: ElevatedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon),
+        label: Text(label),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.blue,
+          foregroundColor: Colors.white,
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
       ),
-      child: Text(label),
     );
   }
 }
@@ -374,22 +367,15 @@ class ScannerOverlayShape extends ShapeBorder {
       ..strokeWidth = borderWidth;
 
     final path = Path();
-    // Top left
     path.moveTo(cutOutRect.left, cutOutRect.top + borderLength);
     path.lineTo(cutOutRect.left, cutOutRect.top);
     path.lineTo(cutOutRect.left + borderLength, cutOutRect.top);
-
-    // Top right
     path.moveTo(cutOutRect.right - borderLength, cutOutRect.top);
     path.lineTo(cutOutRect.right, cutOutRect.top);
     path.lineTo(cutOutRect.right, cutOutRect.top + borderLength);
-
-    // Bottom right
     path.moveTo(cutOutRect.right, cutOutRect.bottom - borderLength);
     path.lineTo(cutOutRect.right, cutOutRect.bottom);
     path.lineTo(cutOutRect.right - borderLength, cutOutRect.bottom);
-
-    // Bottom left
     path.moveTo(cutOutRect.left + borderLength, cutOutRect.bottom);
     path.lineTo(cutOutRect.left, cutOutRect.bottom);
     path.lineTo(cutOutRect.left, cutOutRect.bottom - borderLength);

@@ -29,24 +29,37 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  String _scanResult = 'No data scanned yet';
+  final TextEditingController _controller = TextEditingController();
 
   void _openScanner() {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (context) => SizedBox(
-        height: MediaQuery.of(context).size.height * 0.8,
+      useSafeArea: true,
+      builder: (context) => FractionallySizedBox(
+        heightFactor: 0.9,
         child: MlkitScannerWidget(
           onResult: (result) {
-            setState(() {
-              _scanResult = result;
-            });
-            Navigator.pop(context);
+            if (result['success'] == true) {
+              setState(() {
+                _controller.text = result['value'];
+              });
+              Navigator.pop(context);
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(result['message'])),
+              );
+            }
           },
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 
   @override
@@ -58,37 +71,36 @@ class _MyHomePageState extends State<MyHomePage> {
       ),
       body: Center(
         child: Padding(
-          padding: const EdgeInsets.all(20.0),
+          padding: const EdgeInsets.all(24.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
               const Text(
-                'Scan Result:',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                'Enter text or scan to add data',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
               ),
-              const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.all(15),
-                decoration: BoxDecoration(
-                  color: Colors.grey[200],
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.grey),
-                ),
-                child: SelectableText(
-                  _scanResult,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 16),
+              const SizedBox(height: 20),
+              TextField(
+                controller: _controller,
+                maxLines: null,
+                decoration: InputDecoration(
+                  hintText: 'Type here...',
+                  border: const OutlineInputBorder(),
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.qr_code_scanner, color: Colors.blue),
+                    onPressed: _openScanner,
+                    tooltip: 'Open Scanner',
+                  ),
                 ),
               ),
               const SizedBox(height: 40),
-              ElevatedButton.icon(
-                onPressed: _openScanner,
-                icon: const Icon(Icons.qr_code_scanner),
-                label: const Text('Open Scanner'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-                  textStyle: const TextStyle(fontSize: 18),
-                ),
+              ElevatedButton(
+                onPressed: () {
+                  setState(() {
+                    _controller.clear();
+                  });
+                },
+                child: const Text('Clear Field'),
               ),
             ],
           ),
