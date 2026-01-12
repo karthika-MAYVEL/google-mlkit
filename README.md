@@ -1,14 +1,14 @@
-# ML Kit Global Scanner Component
+# ML Kit Structured Scanner Component
 
-A professional, reusable Flutter component for QR/Barcode scanning and OCR (Text Recognition) using Google ML Kit and `mobile_scanner`.
+A self-contained, importable Flutter component for QR/Barcode scanning and OCR (Text Recognition) using Google ML Kit and `mobile_scanner`.
 
 ## Features
 
-- **Global Reusability**: Easily trigger the scanner from anywhere in your app using a static method.
-- **Professional UI**: Polished selection screens, scanning overlays, and animations.
-- **QR / Barcode Scanning**: High-performance scanning using `mobile_scanner`.
-- **OCR (Text Recognition)**: Extract text from images or camera captures using Google ML Kit.
-- **Structured Output**: Returns a consistent data format for easy integration.
+- **Structured Flow**: A professional selection pop-up to choose between QR and OCR modes.
+- **QR / Barcode Scanning**: High-performance scanning with both camera and gallery support.
+- **OCR (Text Recognition)**: Extract text from camera captures or gallery images.
+- **Importable Widget**: Designed to be easily integrated into any Flutter project.
+- **Consistent Output**: Returns a structured JSON-like map for easy data handling.
 
 ## Getting Started
 
@@ -18,6 +18,7 @@ A professional, reusable Flutter component for QR/Barcode scanning and OCR (Text
     ```yaml
     dependencies:
       mobile_scanner: ^6.0.0
+      google_mlkit_barcode_scanning: ^0.13.0
       google_mlkit_text_recognition: ^0.14.0
       image_picker: ^1.1.2
       permission_handler: ^11.3.1
@@ -29,21 +30,34 @@ A professional, reusable Flutter component for QR/Barcode scanning and OCR (Text
 
 ## Usage
 
-### Global Trigger
+### Integration
 
-You can open the scanner from any `BuildContext` using the static `scan` method:
+You can use the `MlkitScanner` widget directly as a component (e.g., in a `TextField`'s `suffixIcon`):
 
 ```dart
 import 'package:google_mlkit/widgets/mlkit_scanner_widget.dart';
 
-void _onScanPressed() async {
-  final result = await MlkitScanner.scan(context);
-  
-  if (result != null && result['success'] == true) {
-    print("Scanned value: ${result['value']}");
-    print("Scan type: ${result['scanType']}");
-  }
-}
+TextField(
+  decoration: InputDecoration(
+    suffixIcon: MlkitScanner(
+      onResult: (result) {
+        if (result['success']) {
+          print("Scanned: ${result['value']}");
+        }
+      },
+    ),
+  ),
+)
+```
+
+### Manual Trigger
+
+You can also trigger the selection flow manually using the static `start` method:
+
+```dart
+MlkitScanner.start(context, onResult: (result) {
+  // Handle result
+});
 ```
 
 ### Structured Output Format
@@ -62,9 +76,5 @@ The scanner returns a `Map<String, dynamic>`:
 ## Project Structure
 
 - `lib/widgets/mlkit_scanner_widget.dart`: The core `MlkitScanner` component.
-- `lib/services/scanner_service.dart`: OCR processing logic.
-- `lib/main.dart`: Demo application showing global integration.
-
-## Customization
-
-The `MlkitScanner` is designed to be self-contained. You can customize the `ScannerOverlayShape` or the selection cards within `mlkit_scanner_widget.dart` to match your app's branding.
+- `lib/services/scanner_service.dart`: OCR and Barcode processing logic for images.
+- `lib/main.dart`: Demo application showing the structured integration.
