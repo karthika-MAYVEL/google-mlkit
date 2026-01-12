@@ -1,6 +1,7 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit/services/scanner_service.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 enum ScannerMode { barcode, ocr }
@@ -17,9 +18,11 @@ class MlkitScannerWidget extends StatefulWidget {
 class _MlkitScannerWidgetState extends State<MlkitScannerWidget> {
   CameraController? _cameraController;
   final ScannerService _scannerService = ScannerService();
+  final ImagePicker _imagePicker = ImagePicker();
   ScannerMode _currentMode = ScannerMode.barcode;
   bool _isProcessing = false;
   bool _isCameraInitialized = false;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -28,49 +31,55 @@ class _MlkitScannerWidgetState extends State<MlkitScannerWidget> {
   }
 
   Future<void> _initializeCamera() async {
-    final status = await Permission.camera.request();
-    if (status.isGranted) {
-      final cameras = await availableCameras();
-      if (cameras.isNotEmpty) {
-        _cameraController = CameraController(
-          cameras.first,
-          ResolutionPreset.high,
-          enableAudio: false,
-        );
+    try {
+      final status = await Permission.camera.request();
+      if (status.isGranted) {
+        final cameras = await availableCameras();
+        if (cameras.isNotEmpty) {
+          _cameraController = CameraController(
+            cameras.first,
+            ResolutionPreset.high,
+            enableAudio: false,
+          );
 
-        try {
           await _cameraController!.initialize();
           if (mounted) {
             setState(() {
               _isCameraInitialized = true;
+              _errorMessage = null;
             });
           }
-        } catch (e) {
-          debugPrint('Error initializing camera: $e');
+        } else {
+          setState(() {
+            _errorMessage = 'No cameras found on this device.';
+          });
         }
+      } else {
+        setState(() {
+          _errorMessage = 'Camera permission denied.';
+        });
       }
-    } else {
-      debugPrint('Camera permission denied');
+    } catch (e) {
+      debugPrint('Error initializing camera: $e');
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Failed to initialize camera: $e';
+        });
+      }
     }
   }
 
-  Future<void> _processImage() async {
-    if (_cameraController == null || !_cameraController!.value.isInitialized || _isProcessing) {
-      return;
-    }
-
+  Future<void> _processImage(String path) async {
     setState(() {
       _isProcessing = true;
     });
 
     try {
-      final XFile image = await _cameraController!.takePicture();
       String? result;
-
       if (_currentMode == ScannerMode.barcode) {
-        result = await _scannerService.scanBarcode(image.path);
+        result = await _scannerService.scanBarcode(path);
       } else {
-        result = await _scannerService.recognizeText(image.path);
+        result = await _scannerService.recognizeText(path);
       }
 
       if (result != null && result.isNotEmpty) {
@@ -93,6 +102,32 @@ class _MlkitScannerWidgetState extends State<MlkitScannerWidget> {
     }
   }
 
+  Future<void> _takePicture() async {
+    if (_cameraController == null || !_cameraController!.value.isInitialized || _isProcessing) {
+      return;
+    }
+
+    try {
+      final XFile image = await _cameraController!.takePicture();
+      await _processImage(image.path);
+    } catch (e) {
+      debugPrint('Error taking picture: $e');
+    }
+  }
+
+  Future<void> _pickFromGallery() async {
+    if (_isProcessing) return;
+
+    try {
+      final XFile? image = await _imagePicker.pickImage(source: ImageSource.gallery);
+      if (image != null) {
+        await _processImage(image.path);
+      }
+    } catch (e) {
+      debugPrint('Error picking image: $e');
+    }
+  }
+
   @override
   void dispose() {
     _cameraController?.dispose();
@@ -102,18 +137,56 @@ class _MlkitScannerWidgetState extends State<MlkitScannerWidget> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_isCameraInitialized) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          if (_isCameraInitialized && _cameraController != null)
+            Positioned.fill(
+              child: CameraPreview(_cameraController!),
+            )
+          else if (_errorMessage != null)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline, color: Colors.red, size: 60),
+                    const SizedBox(height: 16),
+                    Text(
+                      _errorMessage!,
+                      style: const TextStyle(color: Colors.white, fontSize: 16),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 24),
+                    ElevatedButton(
+                      onPressed: _initializeCamera,
+                      child: const Text('Retry Camera'),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            const Center(child: CircularProgressIndicator()),
+          
+          if (_isCameraInitialized) _buildOverlay(),
+          _buildControls(),
+          _buildTopBar(),
+        ],
+      ),
+    );
+  }
 
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: CameraPreview(_cameraController!),
-        ),
-        _buildOverlay(),
-        _buildControls(),
-      ],
+  Widget _buildTopBar() {
+    return Positioned(
+      top: 40,
+      left: 10,
+      child: IconButton(
+        icon: const Icon(Icons.close, color: Colors.white, size: 30),
+        onPressed: () => Navigator.pop(context),
+      ),
     );
   }
 
@@ -147,23 +220,33 @@ class _MlkitScannerWidgetState extends State<MlkitScannerWidget> {
             ],
           ),
           const SizedBox(height: 30),
-          GestureDetector(
-            onTap: _processImage,
-            child: Container(
-              height: 80,
-              width: 80,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.8),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.blue, width: 4),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.photo_library, color: Colors.white, size: 35),
+                onPressed: _pickFromGallery,
               ),
-              child: _isProcessing
-                  ? const Padding(
-                      padding: EdgeInsets.all(20.0),
-                      child: CircularProgressIndicator(),
-                    )
-                  : const Icon(Icons.camera_alt, size: 40, color: Colors.blue),
-            ),
+              GestureDetector(
+                onTap: _takePicture,
+                child: Container(
+                  height: 80,
+                  width: 80,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.8),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.blue, width: 4),
+                  ),
+                  child: _isProcessing
+                      ? const Padding(
+                          padding: EdgeInsets.all(20.0),
+                          child: CircularProgressIndicator(),
+                        )
+                      : const Icon(Icons.camera_alt, size: 40, color: Colors.blue),
+                ),
+              ),
+              const SizedBox(width: 48), // Spacer to balance gallery icon
+            ],
           ),
         ],
       ),
@@ -179,7 +262,7 @@ class _MlkitScannerWidgetState extends State<MlkitScannerWidget> {
         });
       },
       style: ElevatedButton.styleFrom(
-        backgroundColor: isSelected ? Colors.blue : Colors.grey,
+        backgroundColor: isSelected ? Colors.blue : Colors.grey[800],
         foregroundColor: Colors.white,
       ),
       child: Text(label),
