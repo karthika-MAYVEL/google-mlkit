@@ -1,5 +1,4 @@
-import 'package:flutter/material.dart';
-import 'package:google_mlkit/widgets/mlkit_scanner_widget.dart';
+import 'package:google_mlkit/mlkit_scanner.dart';
 
 void main() {
   runApp(const MyApp());
@@ -32,21 +31,21 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   final TextEditingController _controller = TextEditingController();
 
-  void _handleScanResult(Map<String, dynamic> result) {
-    if (result['success'] == true) {
+  void _handleScanResult(ScanResult result) {
+    if (result.success) {
       setState(() {
-        _controller.text = result['value'];
+        _controller.text = result.value;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Scanned ${result['scanType'].toString().toUpperCase()} successfully!'),
+          content: Text('Scanned ${result.scanType.name.toUpperCase()} successfully!'),
           backgroundColor: Colors.green,
         ),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(result['message']),
+          content: Text(result.message),
           backgroundColor: Colors.red,
         ),
       );
