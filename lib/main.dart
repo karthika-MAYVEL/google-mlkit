@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:google_mlkit/mlkit_scanner.dart';
 
 void main() {

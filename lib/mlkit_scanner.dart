@@ -1,4 +1,4 @@
-library mlkit_scanner;
+library;
 
 export 'src/mlkit_scanner/mlkit_scanner_widget.dart';
 export 'src/mlkit_scanner/models.dart';
