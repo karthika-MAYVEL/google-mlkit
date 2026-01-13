@@ -1,80 +1,67 @@
-# ML Kit Structured Scanner Component
+camera (camera frames)
 
-A self-contained, importable Flutter component for QR/Barcode scanning and OCR (Text Recognition) using Google ML Kit and `mobile_scanner`.
+google_mlkit_barcode_scanning (ML Kit decoding)
 
-## Features
+10s timeout
 
-- **Structured Flow**: A professional selection pop-up to choose between QR and OCR modes.
-- **QR / Barcode Scanning**: High-performance scanning with both camera and gallery support.
-- **OCR (Text Recognition)**: Extract text from camera captures or gallery images.
-- **Importable Widget**: Designed to be easily integrated into any Flutter project.
-- **Consistent Output**: Returns a structured JSON-like map for easy data handling.
+empty/too-long validation
 
-## Getting Started
+returns ScanResult(status, code, value, message)
 
-### Installation
+1) Dependencies (pubspec.yaml)
+dependencies:
+  flutter:
+    sdk: flutter
+  camera: ^0.11.0+2
+  google_mlkit_barcode_scanning: ^0.13.0
 
-1.  **Add dependencies** to your `pubspec.yaml`:
-    ```yaml
-    dependencies:
-      mobile_scanner: ^6.0.0
-      google_mlkit_barcode_scanning: ^0.13.0
-      google_mlkit_text_recognition: ^0.14.0
-      image_picker: ^1.1.2
-      permission_handler: ^11.3.1
-    ```
 
-2.  **Configure Permissions**:
-    - **Android**: Add `CAMERA` and storage permissions to `AndroidManifest.xml`.
-    - **iOS**: Add `NSCameraUsageDescription` and `NSPhotoLibraryUsageDescription` to `Info.plist`.
+Run:
 
-## Usage
+flutter pub get
 
-### Integration
+2) Permissions
+Android: android/app/src/main/AndroidManifest.xml
+<uses-permission android:name="android.permission.CAMERA" />
 
-You can use the `MlkitScanner` widget directly as a component (e.g., in a `TextField`'s `suffixIcon`):
+iOS: ios/Runner/Info.plist
+<key>NSCameraUsageDescription</key>
+<string>Camera access is required to scan QR/Barcodes.</string>
 
-```dart
-import 'package:google_mlkit/widgets/mlkit_scanner_widget.dart';
 
-TextField(
-  decoration: InputDecoration(
-    suffixIcon: MlkitScanner(
-      onResult: (result) {
-        if (result['success']) {
-          print("Scanned: ${result['value']}");
-        }
-      },
-    ),
-  ),
+3) Professional component structure
+lib/
+  components/
+    mlkit_scanner/
+      mlkit_scanner.dart                 # public export (single import)
+      models/
+        scan_result.dart
+      widgets/
+        mlkit_scanner_button.dart
+      pages/
+        mlkit_scanner_page.dart
+
+4) Public export file
+lib/components/mlkit_scanner/mlkit_scanner.dart
+
+5) Return model
+lib/components/mlkit_scanner/models/scan_result.dart
+
+6) Scanner page (Camera + ML Kit)
+lib/components/mlkit_scanner/pages/mlkit_scanner_page.dart
+
+7) Scanner button widget (component API)
+lib/components/mlkit_scanner/widgets/mlkit_scanner_button.dart
+
+8) Use it anywhere in your frontend
+import 'package:your_app/components/mlkit_scanner/mlkit_scanner.dart';
+
+MlkitScannerButton(
+  onResult: (r) {
+    if (r.status == "pass") {
+      // r.value is your QR/barcode value
+    } else {
+      // show r.message to user
+    }
+  },
 )
-```
-
-### Manual Trigger
-
-You can also trigger the selection flow manually using the static `start` method:
-
-```dart
-MlkitScanner.start(context, onResult: (result) {
-  // Handle result
-});
-```
-
-### Structured Output Format
-
-The scanner returns a `Map<String, dynamic>`:
-
-```json
-{
-  "success": true,
-  "scanType": "ocr | qr",
-  "value": "scanned text or code value",
-  "message": "Successful scan"
-}
-```
-
-## Project Structure
-
-- `lib/widgets/mlkit_scanner_widget.dart`: The core `MlkitScanner` component.
-- `lib/services/scanner_service.dart`: OCR and Barcode processing logic for images.
-- `lib/main.dart`: Demo application showing the structured integration.

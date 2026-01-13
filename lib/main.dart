@@ -1,98 +1,72 @@
 import 'package:flutter/material.dart';
-import 'package:google_mlkit/mlkit_scanner.dart';
+import 'package:google_mlkit/components/mlkit_scanner/mlkit_scanner.dart';
 
 void main() {
-  runApp(const MyApp());
+  // Ensure Flutter is initialized
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  debugPrint('--- APP STARTING ---');
+  runApp(const TestApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class TestApp extends StatelessWidget {
+  const TestApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Structured Scanner Demo',
-      debugShowCheckedModeBanner: false,
+      title: 'ML Kit Scanner',
+      debugShowCheckedModeBanner: true, // Show banner to confirm it's running
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
       ),
-      home: const MyHomePage(),
+      home: const ScannerTestPage(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key});
-
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  final TextEditingController _controller = TextEditingController();
-
-  void _handleScanResult(ScanResult result) {
-    if (result.success) {
-      setState(() {
-        _controller.text = result.value;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Scanned ${result.scanType.name.toUpperCase()} successfully!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(result.message),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+class ScannerTestPage extends StatelessWidget {
+  const ScannerTestPage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    debugPrint('--- BUILDING ScannerTestPage ---');
+    
     return Scaffold(
+      backgroundColor: Colors.white, // Explicit background color
       appBar: AppBar(
-        title: const Text('Structured Scanner Demo'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        title: const Text('ML Kit Scanner Test'),
+        backgroundColor: Colors.deepPurple.withOpacity(0.1),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'Enter text or use the scanner',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
-            ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: _controller,
-              maxLines: null,
-              decoration: InputDecoration(
-                hintText: 'Type here...',
-                border: const OutlineInputBorder(),
-                suffixIcon: MlkitScanner(
-                  onResult: _handleScanResult,
-                ),
+      body: SafeArea(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text(
+                'ML Kit Scanner Ready',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
-            ),
-            const SizedBox(height: 40),
-            ElevatedButton(
-              onPressed: () => setState(() => _controller.clear()),
-              child: const Text('Clear Field'),
-            ),
-          ],
+              const SizedBox(height: 20),
+              MlkitScannerButton(
+                onResult: (result) {
+                  debugPrint('Scan Result: ${result.status} - ${result.value}');
+                  if (result.status == 'pass') {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Scanned: ${result.value}')),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error: ${result.message}')),
+                    );
+                  }
+                },
+              ),
+              const SizedBox(height: 10),
+              const Text('Tap the icon to start scanning'),
+            ],
+          ),
         ),
       ),
     );

@@ -49,5 +49,9 @@
 	<string>This app needs camera access to scan QR codes and perform OCR.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>This app needs photo library access to process images for OCR.</string>
+	<string>This app needs camera access to scan QR codes</string>
+
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>This app needs photos access to get QR code from photo library</string>
 </dict>
 </plist>
